@@ -27,6 +27,9 @@ private class AutomationConsole(val title: String, val lines: List<String>)
 private class AutomationDiagnostic(val severity: String, val message: String, val from: Int, val to: Int)
 
 @Serializable
+private class AutomationBounds(val x: Float, val y: Float, val width: Float, val height: Float)
+
+@Serializable
 private class AutomationState(
     val pluginsReady: Boolean,
     val text: String,
@@ -36,6 +39,7 @@ private class AutomationState(
     val compiler: String?,
     val console: AutomationConsole?,
     val diagnostics: List<AutomationDiagnostic>,
+    val runButton: AutomationBounds?,
 )
 
 @Serializable
@@ -55,6 +59,7 @@ fun automationState(): String = Json.encodeToString(
         compiler = session.compilerStatus,
         console = session.console?.let { AutomationConsole(it.title, it.lines) },
         diagnostics = session.diagnostics.map { AutomationDiagnostic(it.severity, it.message, it.from, it.to) },
+        runButton = session.runButtonBounds?.let { AutomationBounds(it.x, it.y, it.width, it.height) },
     )
 )
 

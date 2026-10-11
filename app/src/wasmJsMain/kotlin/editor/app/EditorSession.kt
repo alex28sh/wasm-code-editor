@@ -28,6 +28,9 @@ private const val SAVE_DELAY_MILLISECONDS = 300L
 /** What the panel under the editor says about the last run of the program. */
 class RunConsole(val title: String, val lines: List<String>)
 
+/** Where a button drawn by Compose is in the window, in CSS pixels. */
+class ButtonBounds(val x: Float, val y: Float, val width: Float, val height: Float)
+
 /** State of the running editor, observable from Compose. */
 class EditorSession {
     /** Starts as the document the browser kept from the last time, or as the sample. */
@@ -58,6 +61,9 @@ class EditorSession {
     /** The problems the compiler found in the text they are marked in. */
     internal var diagnostics by mutableStateOf(emptyList<CompilerDiagnostic>())
         private set
+
+    /** Where the Run button is; the tests need it to click what is only drawn. */
+    internal var runButtonBounds: ButtonBounds? = null
 
     private val scope = MainScope()
     private var compiler: KotlinCompiler? = null

@@ -36,6 +36,8 @@ The compiler and the Analysis API are part of the distribution only where Oracle
   - the loaded plugins, with `(sandboxed)` after those that run in a worker;
   - the state of the compiler, once it has been started: `loading` or `ready`;
   - a line for every plugin that failed to load, with the reason.
+- The **Run** button is at the right end of the status bar. It is drawn on the canvas like the rest of the bar,
+  so the keyboard and assistive technology do not reach it; Ctrl+Enter does the same.
 - The look follows IntelliJ Light. The editor is a CodeMirror 6 view; the status bar and the output panel are
   drawn by Compose Multiplatform on a canvas.
 
@@ -94,7 +96,8 @@ the names declared in the file; it does not know the standard library or types o
 
 ## Compiling and running
 
-- **Ctrl+Enter** compiles the document for the Wasm target and runs the result. An output panel appears between
+- **Ctrl+Enter** in the editor, or the **Run** button at the right end of the status bar, compiles the document
+  for the Wasm target and runs the result. An output panel appears between
   the editor and the status bar with the state (`Compiling`, `Running`, `Finished`, `Failed`, `Compilation failed`)
   and what the program printed.
 - When the document does not compile, the panel lists the errors as `line:column: message` and they are marked in
@@ -157,7 +160,7 @@ application instead of bundling a copy of the standard library (`kotlin.wasm.com
 
 The application module exports functions the browser tests use to observe and drive what is drawn on the canvas
 (`app/src/wasmJsMain/kotlin/editor/app/Automation.kt`): `automationState()` (text, caret, plugins, failures,
-compiler state, output panel, diagnostics), `automationSetText`, `automationSelect`, `automationRun` and
+compiler state, output panel, diagnostics, where the Run button is), `automationSetText`, `automationSelect`, `automationRun` and
 `automationLoadSandboxedPlugin`.
 
 ## Modules

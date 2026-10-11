@@ -1,18 +1,35 @@
 package editor.app
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.WebElementView
 import androidx.compose.ui.window.ComposeViewport
@@ -55,13 +72,54 @@ private fun App(session: EditorSession) {
                 console.lines.forEach { BasicText(it) }
             }
         }
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-            val text = session.text
-            val compiler = session.compilerStatus?.let { " | Compiler: $it" }.orEmpty()
-            val active = session.plugins.joinToString { if (it.sandboxed) "${it.id} (sandboxed)" else it.id }
-            BasicText("${caretText(session.caret)} | ${text.lines().size} lines, ${text.length} characters | Plugins: ${active.ifEmpty { "none" }}$compiler")
-            session.failures.forEach { BasicText("Plugin loading failed: ${it.module}: ${it.message}") }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f)) {
+                val text = session.text
+                val compiler = session.compilerStatus?.let { " | Compiler: $it" }.orEmpty()
+                val active = session.plugins.joinToString { if (it.sandboxed) "${it.id} (sandboxed)" else it.id }
+                BasicText("${caretText(session.caret)} | ${text.lines().size} lines, ${text.length} characters | Plugins: ${active.ifEmpty { "none" }}$compiler")
+                session.failures.forEach { BasicText("Plugin loading failed: ${it.module}: ${it.message}") }
+            }
+            RunButton(session)
         }
+    }
+}
+
+private val runGreen = Color(0xFF59A869)
+private val buttonBorder = Color(0xFFC9CCD6)
+
+/** Compiles and runs the document, as Ctrl+Enter does in the editor. */
+@Composable
+private fun RunButton(session: EditorSession) {
+    val density = LocalDensity.current.density
+    Row(
+        Modifier
+            .padding(start = 12.dp)
+            .onGloballyPositioned {
+                val bounds = it.boundsInWindow()
+                session.runButtonBounds = ButtonBounds(bounds.left / density, bounds.top / density, bounds.width / density, bounds.height / density)
+            }
+            .clip(RoundedCornerShape(4.dp))
+            .border(1.dp, buttonBorder, RoundedCornerShape(4.dp))
+            .background(Color.White)
+            .pointerHoverIcon(PointerIcon.Hand)
+            .clickable { session.run() }
+            // No higher than a line of text, so that the status bar is as high with the button as without.
+            .padding(horizontal = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // A triangle of its own: the font has no glyph for one.
+        Canvas(Modifier.size(9.dp)) {
+            val triangle = Path().apply {
+                moveTo(0f, 0f)
+                lineTo(size.width, size.height / 2)
+                lineTo(0f, size.height)
+                close()
+            }
+            drawPath(triangle, runGreen)
+        }
+        BasicText("Run")
     }
 }
 

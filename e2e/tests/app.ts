@@ -10,6 +10,8 @@ export interface AppState {
     compiler: string | null;
     console: { title: string; lines: string[] } | null;
     diagnostics: { severity: string; message: string; from: number; to: number }[];
+    /** Where Compose draws the Run button, in CSS pixels. */
+    runButton: { x: number; y: number; width: number; height: number } | null;
 }
 
 export interface ConsoleEntry {
@@ -186,6 +188,12 @@ export class EditorApp {
     async run(): Promise<AppState> {
         await this.page.evaluate(async module => (await import(module)).automationRun(), appModule);
         return this.state();
+    }
+
+    /** Clicks the Run button, which is only drawn on the canvas, in its middle. */
+    async clickRunButton(): Promise<void> {
+        const button = (await this.state()).runButton!;
+        await this.page.mouse.click(button.x + button.width / 2, button.y + button.height / 2);
     }
 
     async text(): Promise<string> {

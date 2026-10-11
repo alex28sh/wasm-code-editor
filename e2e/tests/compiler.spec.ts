@@ -61,6 +61,27 @@ test.describe('compiler', () => {
         expect(await app.text()).toContain('println(greet("Wasm"))\n}');
     });
 
+    test('runs with the Run button', async ({ app, page }) => {
+        const button = (await app.state()).runButton!;
+        const viewport = page.viewportSize()!;
+        // At the right end of the status bar.
+        expect(button.x + button.width).toBeGreaterThan(viewport.width - 20);
+        expect(button.y).toBeGreaterThan((await app.editor.boundingBox())!.height);
+
+        await app.clickRunButton();
+
+        await expect.poll(async () => (await app.state()).console, { timeout: 200_000 })
+            .toEqual({ title: 'Finished', lines: ['Hello, Wasm!'] });
+        // The panel has pushed the button down, and it still works where it is now.
+        const moved = (await app.state()).runButton!;
+        expect(moved.y).toBeCloseTo(button.y, 0);
+        await app.setText('fun main() {\n    println("again")\n}');
+        await app.clickRunButton();
+        await expect.poll(async () => (await app.state()).console, { timeout: 60_000 })
+            .toEqual({ title: 'Finished', lines: ['again'] });
+        expect(app.pageErrors).toEqual([]);
+    });
+
     test('reports what does not compile and marks it in the text', async ({ app, page }) => {
         await app.setText(broken);
 
