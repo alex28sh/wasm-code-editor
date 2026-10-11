@@ -26,6 +26,7 @@ Two runs at once delete each other's traces in `test-results`; give one of them 
 | `plugins.spec.ts` | both plugin tiers, worker isolation, termination of a hung plugin, rejection of disallowed imports and broken binaries |
 | `plugin-index.spec.ts` | trust decisions of the plugin index, failing entries, a missing, broken or slow index |
 | `compiler.spec.ts` | compiling and running the document with Ctrl+Enter, problems marked in the text, completion by the Analysis API; skipped when the distribution has no compiler (see `compiler-host/README.md`) |
+| `persistence.spec.ts` | the document kept in the browser: reload, a page opened later, what was typed just before leaving, missing or full storage |
 | `distribution.spec.ts` | contents of the distribution (import map, plugin index, shared modules) and the static server, without a browser |
 | `visual.spec.ts` | screenshots of the whole page against the baselines in `tests/__screenshots__` |
 

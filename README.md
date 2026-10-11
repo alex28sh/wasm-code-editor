@@ -25,8 +25,11 @@ The compiler and the Analysis API are part of the distribution only where Oracle
 
 - The editor fills the window; a status bar is under it. The page itself never scrolls: a long document and a
   long line scroll inside the editor, and the line numbers stay at the left edge.
-- The application starts with a small sample program. The document lives in the page only: a reload starts from
-  the sample again, and two pages do not share their documents. There is no opening or saving of files.
+- The document is kept in the browser (`localStorage`), so a reload or a page opened later starts with what was
+  there last; the first time it is a small sample program. It is saved 300 ms after the last change, and when the
+  page is left with a change not saved yet. Two pages open at the same time do not follow each other: each edits its own copy, and the one
+  changed last is what is kept. Where the browser gives no storage the editor works as before, without keeping
+  anything. There is no opening or saving of files.
 - The status bar shows:
   - the caret as `line:column`, and what is selected: `(3 chars)`, or `(2 carets)` during a rename;
   - the number of lines and characters of the document;
@@ -168,7 +171,8 @@ compiler state, output panel, diagnostics), `automationSetText`, `automationSele
 
 ## Not there yet
 
-- Files: opening, saving, several documents, projects.
+- Files: opening, saving, several documents, projects. A way back to the sample other than clearing the site data.
+- Keeping anything but the text between sessions: the caret, the scroll position, the undo history, the output.
 - Libraries other than the standard library, and input to a running program.
 - Navigation, rename and highlighting by the Analysis API; they use the editor's name-based analysis.
 - Extension functions and keywords in the completion by meaning, and adding imports.

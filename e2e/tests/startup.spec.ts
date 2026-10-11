@@ -62,7 +62,7 @@ test.describe('startup', () => {
         await expect(app.content).toHaveAttribute('data-language', 'kotlin');
     });
 
-    test('starts again from the sample document after a reload', async ({ app, page }) => {
+    test('starts again with fresh plugins and the kept document after a reload', async ({ app, page }) => {
         await app.open('?sandbox=all');
         await app.setText('val edited = true');
         await expect.poll(() => app.text()).toBe('val edited = true');
@@ -72,14 +72,14 @@ test.describe('startup', () => {
         await app.pluginsSettled();
 
         const state = await app.state();
-        expect(state.text).toBe(sampleText);
+        expect(state.text).toBe('val edited = true');
         expect(state.plugins).toEqual([{ id: 'hello', sandboxed: true }]);
         // The worker of the previous page is gone.
         expect(page.workers()).toHaveLength(1);
         expect(app.pageErrors).toEqual([]);
     });
 
-    test('two pages do not share their documents', async ({ app, context }) => {
+    test('two open pages do not share their documents', async ({ app, context }) => {
         await app.open();
         const other = await context.newPage();
         await other.goto('/');

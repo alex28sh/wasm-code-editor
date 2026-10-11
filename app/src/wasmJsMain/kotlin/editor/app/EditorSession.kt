@@ -23,13 +23,15 @@ private fun sandboxAllRequested(): Boolean =
     js("new URLSearchParams(globalThis.location.search).get('sandbox') === 'all'")
 
 private const val CHECK_DELAY_MILLISECONDS = 300L
+private const val SAVE_DELAY_MILLISECONDS = 300L
 
 /** What the panel under the editor says about the last run of the program. */
 class RunConsole(val title: String, val lines: List<String>)
 
 /** State of the running editor, observable from Compose. */
 class EditorSession {
-    var text by mutableStateOf(sampleText)
+    /** Starts as the document the browser kept from the last time, or as the sample. */
+    var text by mutableStateOf(DocumentStore.load() ?: sampleText)
         private set
 
     var plugins by mutableStateOf(emptyList<LoadedPlugin>())
@@ -61,17 +63,34 @@ class EditorSession {
     private var compiler: KotlinCompiler? = null
     private var analysis: KotlinAnalysis? = null
     private var checking: Job? = null
+    private var saving: Job? = null
     private var running: Job? = null
 
     val editor = CodeEditor(
-        sampleText,
+        text,
         onTextChanged = {
             text = it
+            saveLater()
             checkLater()
         },
         onCaretMoved = { caret = it },
         onRunRequested = { run() },
     )
+
+    init {
+        // A change made just before the page goes away has not been saved yet. A page without such a change
+        // must not save: it would put its old text over what another page has saved since.
+        DocumentStore.beforeLeaving { if (saving?.isActive == true) DocumentStore.save(text) }
+    }
+
+    /** Saves the text a moment after the last change, not on every keystroke. */
+    private fun saveLater() {
+        saving?.cancel()
+        saving = scope.launch {
+            delay(SAVE_DELAY_MILLISECONDS)
+            DocumentStore.save(text)
+        }
+    }
 
     /** Compiles the text and runs the program, replacing a run that is still going. */
     fun run(): Job {
