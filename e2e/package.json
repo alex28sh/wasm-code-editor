@@ -1,0 +1,13 @@
+{
+  "name": "wasm-code-editor-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "update-snapshots": "playwright test --update-snapshots",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0"
+  }
+}

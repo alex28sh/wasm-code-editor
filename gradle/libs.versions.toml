@@ -1,0 +1,31 @@
+[versions]
+# Dev build from https://packages.jetbrains.team/maven/p/kt/bootstrap; move to 2.5.0 on release.
+kotlin = "2.5.0-dev-9169"
+compose = "1.12.1"
+kotlinx-browser = "0.5.0"
+kotlinx-coroutines = "1.11.0"
+kotlinx-serialization = "1.11.0"
+codemirror-setup = "6.0.2"
+codemirror-state = "6.7.6"
+codemirror-view = "6.43.14"
+codemirror-language = "6.13.1"
+codemirror-legacy-modes = "6.5.5"
+codemirror-commands = "6.11.1"
+codemirror-search = "6.7.2"
+codemirror-autocomplete = "6.20.3"
+codemirror-lint = "6.9.7"
+
+[libraries]
+compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose" }
+compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose" }
+compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+kotlinx-browser = { module = "org.jetbrains.kotlinx:kotlinx-browser", version.ref = "kotlinx-browser" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+compose = { id = "org.jetbrains.compose", version.ref = "compose" }
