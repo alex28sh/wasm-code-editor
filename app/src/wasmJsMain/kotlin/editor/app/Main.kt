@@ -30,6 +30,8 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.WebElementView
 import androidx.compose.ui.window.ComposeViewport
@@ -68,8 +70,10 @@ private fun App(session: EditorSession) {
             Column(
                 Modifier.fillMaxWidth().height(160.dp).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
-                BasicText(console.title)
+                // The state of the run and the errors are not what the program printed, and must not look like it.
+                BasicText(console.title, style = TextStyle(color = stateColor(console.state), fontWeight = FontWeight.Bold))
                 console.lines.forEach { BasicText(it) }
+                console.errors.forEach { BasicText(it, style = TextStyle(color = errorRed)) }
             }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.Top) {
@@ -86,6 +90,15 @@ private fun App(session: EditorSession) {
 }
 
 private val runGreen = Color(0xFF59A869)
+private val errorRed = Color(0xFFDB3B4B)
+private val finishedGreen = Color(0xFF208A3C)
+private val inProgressGray = Color(0xFF6C707E)
+
+private fun stateColor(state: RunState): Color = when {
+    state.failed -> errorRed
+    state.inProgress -> inProgressGray
+    else -> finishedGreen
+}
 private val buttonBorder = Color(0xFFC9CCD6)
 
 /** Compiles and runs the document, as Ctrl+Enter does in the editor. */

@@ -25,8 +25,23 @@ private fun sandboxAllRequested(): Boolean =
 private const val CHECK_DELAY_MILLISECONDS = 300L
 private const val SAVE_DELAY_MILLISECONDS = 300L
 
-/** What the panel under the editor says about the last run of the program. */
-class RunConsole(val title: String, val lines: List<String>)
+/** How far the last run of the program has got. */
+enum class RunState(val title: String, val inProgress: Boolean = false, val failed: Boolean = false) {
+    COMPILING("Compiling", inProgress = true),
+    RUNNING("Running", inProgress = true),
+    FINISHED("Finished"),
+    FAILED("Failed", failed = true),
+    COMPILATION_FAILED("Compilation failed", failed = true),
+    COMPILER_FAILED("The compiler failed", failed = true),
+}
+
+/**
+ * What the panel under the editor says about the last run of the program: the [state] of the run,
+ * the [lines] the program printed, and the [errors] of the compiler or the reason the program did not finish.
+ */
+class RunConsole(val state: RunState, val lines: List<String> = emptyList(), val errors: List<String> = emptyList()) {
+    val title: String get() = state.title
+}
 
 /** Where a button drawn by Compose is in the window, in CSS pixels. */
 class ButtonBounds(val x: Float, val y: Float, val width: Float, val height: Float)
@@ -107,29 +122,32 @@ class EditorSession {
     private suspend fun compileAndRun() {
         val compiler = compiler ?: startCompiler()
         val source = text
-        console = RunConsole("Compiling", emptyList())
+        console = RunConsole(RunState.COMPILING)
         val compilation = compiler.compile(source)
         val answer = compilation.answer
         compilerStatus = "ready"
         if (answer.error != null) {
-            console = RunConsole("The compiler failed", answer.error.lines().take(20))
+            console = RunConsole(RunState.COMPILER_FAILED, errors = answer.error.lines().take(20))
             return
         }
         if (source == text) show(answer.diagnostics)
         if (!answer.ok) {
             console = RunConsole(
-                "Compilation failed",
-                answer.diagnostics.filter { it.isError }.map { "${position(source, it.from)}: ${it.message}" },
+                RunState.COMPILATION_FAILED,
+                errors = answer.diagnostics.filter { it.isError }.map { "${position(source, it.from)}: ${it.message}" },
             )
             return
         }
         val lines = mutableListOf<String>()
-        console = RunConsole("Running", emptyList())
+        console = RunConsole(RunState.RUNNING)
         val failure = compilation.run { line ->
             lines += line
-            console = RunConsole("Running", lines.toList())
+            console = RunConsole(RunState.RUNNING, lines.toList())
         }
-        console = RunConsole(if (failure == null) "Finished" else "Failed", lines + listOfNotNull(failure))
+        console = when (failure) {
+            null -> RunConsole(RunState.FINISHED, lines)
+            else -> RunConsole(RunState.FAILED, lines, errors = failure.lines())
+        }
     }
 
     /** Starts the compiler and, next to it, the analysis that from now on checks the text and completes it. */

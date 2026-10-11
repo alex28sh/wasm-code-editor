@@ -21,7 +21,7 @@ private class AutomationFailure(val module: String, val message: String)
 private class AutomationCaret(val line: Int, val column: Int, val selectedCharacters: Int, val carets: Int)
 
 @Serializable
-private class AutomationConsole(val title: String, val lines: List<String>)
+private class AutomationConsole(val title: String, val lines: List<String>, val errors: List<String>)
 
 @Serializable
 private class AutomationDiagnostic(val severity: String, val message: String, val from: Int, val to: Int)
@@ -57,7 +57,7 @@ fun automationState(): String = Json.encodeToString(
         plugins = session.plugins.map { AutomationPlugin(it.id, it.sandboxed) },
         failures = session.failures.map { AutomationFailure(it.module, it.message) },
         compiler = session.compilerStatus,
-        console = session.console?.let { AutomationConsole(it.title, it.lines) },
+        console = session.console?.let { AutomationConsole(it.title, it.lines, it.errors) },
         diagnostics = session.diagnostics.map { AutomationDiagnostic(it.severity, it.message, it.from, it.to) },
         runButton = session.runButtonBounds?.let { AutomationBounds(it.x, it.y, it.width, it.height) },
     )

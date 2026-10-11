@@ -100,6 +100,9 @@ the names declared in the file; it does not know the standard library or types o
   for the Wasm target and runs the result. An output panel appears between
   the editor and the status bar with the state (`Compiling`, `Running`, `Finished`, `Failed`, `Compilation failed`)
   and what the program printed.
+- The three kinds of lines in the panel look different, so that the output of the program is not mistaken for
+  anything else: the state is bold, gray while the run is going, green when it finished and red when it failed;
+  what the program printed is black; the errors of the compiler and the reason a program stopped are red.
 - When the document does not compile, the panel lists the errors as `line:column: message` and they are marked in
   the text.
 - The program runs in a web worker of its own, so it cannot block the editor. It is stopped after 10 seconds.

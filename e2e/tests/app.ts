@@ -8,7 +8,8 @@ export interface AppState {
     failures: { module: string; message: string }[];
     /** What the compiler is doing; `null` until the first run starts it. */
     compiler: string | null;
-    console: { title: string; lines: string[] } | null;
+    /** The state of the last run, what the program printed, and the errors of the compiler or of the program. */
+    console: { title: string; lines: string[]; errors: string[] } | null;
     diagnostics: { severity: string; message: string; from: number; to: number }[];
     /** Where Compose draws the Run button, in CSS pixels. */
     runButton: { x: number; y: number; width: number; height: number } | null;
@@ -188,6 +189,42 @@ export class EditorApp {
     async run(): Promise<AppState> {
         await this.page.evaluate(async module => (await import(module)).automationRun(), appModule);
         return this.state();
+    }
+
+    /**
+     * How many pixels of the output panel, which Compose draws between the editor and the status bar,
+     * are clearly red, green or black. Text is antialiased, so only saturated pixels are counted.
+     */
+    async outputPanelInk(): Promise<{ red: number; green: number; black: number }> {
+        const editor = (await this.editor.boundingBox())!;
+        const statusBar = (await this.state()).runButton!;
+        // Wait for the frame Compose draws after the state has changed.
+        await this.page.waitForTimeout(200);
+        return this.page.evaluate(([top, bottom]) => {
+            const canvases: HTMLCanvasElement[] = [];
+            const collect = (root: Document | ShadowRoot) => root.querySelectorAll('*').forEach(element => {
+                if (element instanceof HTMLCanvasElement) canvases.push(element);
+                if (element.shadowRoot) collect(element.shadowRoot);
+            });
+            collect(document);
+            const source = canvases[0];
+            const copy = document.createElement('canvas');
+            copy.width = source.width;
+            copy.height = source.height;
+            const context = copy.getContext('2d')!;
+            context.drawImage(source, 0, 0);
+            const scale = source.height / innerHeight;
+            const data = context.getImageData(0, Math.round(top * scale), copy.width, Math.round((bottom - top) * scale)).data;
+            const ink = { red: 0, green: 0, black: 0 };
+            for (let i = 0; i < data.length; i += 4) {
+                const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]];
+                if (a < 200) continue;
+                if (r > 180 && g < 110 && b < 120) ink.red++;
+                else if (g > 110 && r < 90 && b < 110) ink.green++;
+                else if (r < 60 && g < 60 && b < 60) ink.black++;
+            }
+            return ink;
+        }, [editor.y + editor.height, statusBar.y - 6]);
     }
 
     /** Clicks the Run button, which is only drawn on the canvas, in its middle. */
