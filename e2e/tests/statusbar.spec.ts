@@ -250,3 +250,35 @@ test.describe('status bar on a phone', () => {
         await app.expectStatusBar('phone-failure.png');
     });
 });
+
+test.describe('status bar canvas', () => {
+    // By default WebGL lets the browser discard the picture once it is shown, and Compose draws no new frame
+    // until something of its own changes. A canvas that the browser presents again in between, as it does while
+    // the editor above it changes, was then blank. Reading the canvas back gets what such a presentation gets.
+    test('stays in the canvas between the frames Compose draws', async ({ app, page }) => {
+        await app.open();
+        await page.waitForTimeout(500);
+
+        const inked = await page.evaluate(() => {
+            const canvases: HTMLCanvasElement[] = [];
+            const collect = (root: Document | ShadowRoot) => root.querySelectorAll('*').forEach(element => {
+                if (element instanceof HTMLCanvasElement) canvases.push(element);
+                if (element.shadowRoot) collect(element.shadowRoot);
+            });
+            collect(document);
+            const source = canvases[0];
+            const copy = document.createElement('canvas');
+            copy.width = source.width;
+            copy.height = source.height;
+            const context = copy.getContext('2d')!;
+            context.drawImage(source, 0, 0);
+            // The status bar is the bottom strip; its text is the only thing with opaque dark pixels there.
+            const strip = context.getImageData(0, copy.height - 40, copy.width, 40).data;
+            let count = 0;
+            for (let i = 0; i < strip.length; i += 4) if (strip[i + 3] > 128 && strip[i] < 128) count++;
+            return count;
+        });
+
+        expect(inked).toBeGreaterThan(100);
+    });
+});

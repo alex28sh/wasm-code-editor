@@ -20,10 +20,15 @@
 <script>
     // Skia reads the unmasked GPU name whenever the browser lists WEBGL_debug_renderer_info, but Skiko's
     // Emscripten glue never enables that extension, so every start logged a WebGL INVALID_ENUM warning.
+    //
+    // Compose draws a frame only when something of its own changes, and by default WebGL lets the browser discard
+    // the picture once it is shown. When the browser then presents the canvas again without a new frame, as it does
+    // while the editor above it changes, the status bar and the output panel come back blank. So the picture is kept.
     const getContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function (type, ...rest) {
-        const context = getContext.call(this, type, ...rest);
-        if (context && String(type).startsWith('webgl')) context.getExtension('WEBGL_debug_renderer_info');
+    HTMLCanvasElement.prototype.getContext = function (type, attributes, ...rest) {
+        const webgl = String(type).startsWith('webgl');
+        const context = getContext.call(this, type, webgl ? { ...attributes, preserveDrawingBuffer: true } : attributes, ...rest);
+        if (context && webgl) context.getExtension('WEBGL_debug_renderer_info');
         return context;
     };
 </script>
