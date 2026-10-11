@@ -5,7 +5,9 @@ WebAssembly (Kotlin/Wasm); it edits one Kotlin document, understands it, and can
 
 This file describes what the application can do. How its parts are built is in:
 - [`compiler-host/README.md`](compiler-host/README.md): the Kotlin compiler and the Analysis API as WebAssembly;
-- [`e2e/README.md`](e2e/README.md): the browser tests.
+- [`e2e/README.md`](e2e/README.md): the browser tests;
+- [`docs/problem-log.md`](docs/problem-log.md): bugs and surprising behaviour of the compilers and libraries the
+  project is built on, with what is done about each.
 
 ## Running it
 
