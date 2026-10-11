@@ -598,6 +598,31 @@ Web Image is experimental. The workarounds are described together in
   symbol, not in the scope of a type, and a class name used as a receiver has no expression type to ask.
 - **Here**: as quoted.
 
+### KT-7. The message of a JavaScript error caught in Kotlin/Wasm is wrapped
+
+- **Seen**: 2026-10-11, Kotlin/Wasm 2.5.0-dev-9169, in the browser.
+- **Symptom**: the message of a caught exception is not the message of the JavaScript error:
+
+  ```
+  Non-Kotlin exception Error: Cannot fetch ./plugins.json of type 'class Error'
+  ```
+
+  where the error was `new Error('Cannot fetch ./plugins.json')`.
+- **Code**: `app/src/wasmJsMain/kotlin/editor/app/PluginLoader.kt`: a rejected promise awaited from Kotlin and
+  caught as `Throwable`:
+
+  ```kotlin
+  private fun fetchText(url: String): Promise<JsString> =
+      js("fetch(url).then(response => response.ok ? response.text() : Promise.reject(new Error('Cannot fetch ' + url)))")
+  ...
+  } catch (e: Throwable) {
+      logWarning("[plugins] cannot read the index $indexUrl: ${e.message ?: e}")
+  ```
+
+- **Cause**: by design, it seems: a thrown JavaScript value becomes a `JsException` whose `message` describes the
+  value instead of repeating its `message`. Not looked up in the standard library.
+- **Here**: nothing; the status bar and the plugin log show the wrapped text, and the tests match a part of it.
+
 ## Compose Multiplatform and Skiko
 
 ### CMP-1. A WebGL warning at every start
@@ -690,7 +715,7 @@ Web Image is experimental. The workarounds are described together in
 Add an entry when a tool or a library does something its documentation or common sense does not predict and the
 project has to work around it, wait for it, or live with it. Add it in the same change as the workaround.
 
-- Take the next number of the section (`WI-16`, `KT-7`), or start a section with a short prefix for a new tool.
+- Take the next number of the section (`WI-16`, `KT-8`), or start a section with a short prefix for a new tool.
   Numbers are never reused; the code may refer to them in comments.
 - Write the date and the versions. Without them nobody can tell later whether the problem is still there.
 - Keep the exact message and the top frames of the stack trace: they are what the next person searches for.

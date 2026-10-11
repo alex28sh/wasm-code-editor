@@ -137,6 +137,10 @@ application instead of bundling a copy of the standard library (`kotlin.wasm.com
     it is linked only against the modules the host allows (`shared-modules.json`: the standard library and the
     plugin API). It cannot reach the page. A worker has a registry of its own, and one that does not answer within
     10 seconds is terminated.
+- Every load is written to the browser console with the prefix `[plugins]`: what the index lists, then for each
+  module the plugins it registered and the way it was loaded (`in the application, trusted by the index`;
+  `in a sandbox worker, not trusted by the index`; `in a sandbox worker, trusted by the index but ?sandbox=all is
+  set`; `in a sandbox worker, loaded on request`). A failed load is a warning with the same words and the reason.
 - `?sandbox=all` in the page address moves the trusted plugins into sandboxes too. The address can only tighten
   the trust decision.
 - A plugin can so far only be activated and deactivated: the API gives it nothing of the editor to work with.

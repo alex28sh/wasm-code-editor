@@ -223,3 +223,75 @@ test.describe('broken index', () => {
         expect(state.text).toBe(sampleText + ' // early');
     });
 });
+
+// Every load is written to the browser console: what a module registered and the way it was loaded.
+test.describe('plugin log', () => {
+    const logged = (app: { console: { type: string; text: string }[] }, type: string) =>
+        app.console.filter(entry => entry.type === type && entry.text.startsWith('[plugins]')).map(entry => entry.text);
+
+    test('says what the index lists and that a trusted plugin runs in the application', async ({ app }) => {
+        await app.open();
+
+        expect(logged(app, 'info')).toEqual([
+            `[plugins] the index ./plugins.json lists 1: ${hello}`,
+            `[plugins] loaded hello from ${hello} in the application, trusted by the index`,
+        ]);
+        expect(logged(app, 'warning')).toEqual([]);
+    });
+
+    test('says that the page address moved a trusted plugin into a sandbox', async ({ app }) => {
+        await app.open('?sandbox=all');
+
+        expect(logged(app, 'info')).toContain(
+            `[plugins] loaded hello from ${hello} in a sandbox worker, trusted by the index but ?sandbox=all is set`,
+        );
+    });
+
+    test('says that the index does not trust a plugin, and names every plugin of a module', async ({ app }) => {
+        await app.servePluginIndex([{ module: pair, trusted: false }, { module: hello, trusted: true }]);
+        await app.open();
+
+        expect(logged(app, 'info')).toEqual([
+            `[plugins] the index ./plugins.json lists 2: ${pair}, ${hello}`,
+            `[plugins] loaded pair-first, pair-second from ${pair} in a sandbox worker, not trusted by the index`,
+            `[plugins] loaded hello from ${hello} in the application, trusted by the index`,
+        ]);
+    });
+
+    test('says that a plugin was loaded on request', async ({ app }) => {
+        await app.open();
+
+        await app.loadSandboxedPlugin(pair);
+
+        expect(logged(app, 'info')).toContain(
+            `[plugins] loaded pair-first, pair-second from ${pair} in a sandbox worker, loaded on request`,
+        );
+    });
+
+    test('an empty index is logged as listing nothing', async ({ app }) => {
+        await app.servePluginIndex([]);
+        await app.open();
+
+        expect(logged(app, 'info')).toEqual(['[plugins] the index ./plugins.json lists 0: nothing']);
+    });
+
+    test('a failed load is a warning with the way it was tried', async ({ app }) => {
+        await app.servePluginIndex([{ module: 'no-such-plugin', trusted: false }, { module: hello, trusted: true }]);
+        await app.open();
+
+        const warnings = logged(app, 'warning');
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toMatch(/^\[plugins\] failed to load no-such-plugin in a sandbox worker, not trusted by the index: Cannot load plugin /);
+        expect(logged(app, 'info')).toContain(`[plugins] loaded hello from ${hello} in the application, trusted by the index`);
+    });
+
+    test('an index that cannot be read is a warning', async ({ app }) => {
+        await app.servePluginIndex('not found', 404);
+        await app.open();
+
+        const warnings = logged(app, 'warning');
+        expect(warnings).toHaveLength(1);
+        // Kotlin wraps the message of a JavaScript error in words of its own (KT-7 in docs/problem-log.md).
+        expect(warnings[0]).toMatch(/^\[plugins\] cannot read the index \.\/plugins\.json: .*Cannot fetch \.\/plugins\.json/);
+    });
+});
