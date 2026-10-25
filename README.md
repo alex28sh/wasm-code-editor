@@ -162,7 +162,8 @@ built on IntelliJ's multiplatform syntax library.
   is three Wasm modules of the application, about 1.3 MB together (the parser 0.5 MB, the syntax library 0.7 MB).
 - Once the compiler is started, the Analysis API checks the text instead and reports syntax errors with everything
   else.
-- A file of 900 lines is parsed in well under a second.
+- Under Node.js the parser takes about 30 ms for 16,000 characters; the browser tests check that an error in a
+  900-line file is marked within 3 seconds of setting the text.
 
 ## Analysis by the compiler
 
