@@ -623,6 +623,29 @@ Web Image is experimental. The workarounds are described together in
   value instead of repeating its `message`. Not looked up in the standard library.
 - **Here**: nothing; the status bar and the plugin log show the wrapped text, and the tests match a part of it.
 
+### KT-8. The light syntax tree of the multiplatform parser keeps no error messages
+
+- **Seen**: 2026-10-25, Kotlin `master` at `dc82a39b65ca`, `org.jetbrains:syntax-api` 0.3.376.
+- **Symptom**: the tree that `buildLanguageSpecificLightTree` makes from a parse says where a syntax error is, but
+  not what it is: there is no message to show.
+- **Code**: `kotlin-parser/upstream/org/jetbrains/kotlin/kmp/tree/LightSyntaxTree.kt`, as in the Kotlin repository:
+
+  ```kotlin
+  marker.isErrorMarker() -> {
+      assignTokens(marker.getStartTokenIndex())
+      parentStartIndex[i] = peekOrRoot()
+      compositeTypes[i] = marker.getNodeType()
+      errorFlags[i] = true
+  ```
+
+  The compiler's own use says the same, in `compiler/fir/raw-fir/mp-parsing2fir/.../MultiplatformParsing2Fir.kt`:
+  `// TODO: KT-89414 (currently KMP parser does not implement error listening, so we can't use diagnosticReporter properly`.
+- **Cause**: verified by reading the code above: only an error flag is stored per marker. The messages are on the
+  production markers of the syntax library (`SyntaxTreeBuilder.Production.getErrorMessage()`), which the tree is
+  built from.
+- **Here**: `KotlinSyntax.parse` in `kotlin-parser` reads the errors from `prepareProduction(builder).productionMarkers`
+  before it builds the tree. `prepareProduction` keeps its result, so building the tree afterwards is not affected.
+
 ## Compose Multiplatform and Skiko
 
 ### CMP-1. A WebGL warning at every start

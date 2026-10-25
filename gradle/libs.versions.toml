@@ -15,7 +15,14 @@ codemirror-search = "6.7.2"
 codemirror-autocomplete = "6.20.3"
 codemirror-lint = "6.9.7"
 
+# IntelliJ's multiplatform syntax library, which the Kotlin compiler's multiplatform parser is written against;
+# the version the Kotlin repository uses at the commit of kotlin-parser/upstream.
+jetbrains-syntax-api = "0.3.376"
+jetbrains-annotations = "26.0.2"
+
 [libraries]
+jetbrains-syntax-api = { module = "org.jetbrains:syntax-api", version.ref = "jetbrains-syntax-api" }
+jetbrains-annotations = { module = "org.jetbrains:annotations", version.ref = "jetbrains-annotations" }
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose" }
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose" }
 compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose" }

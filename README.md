@@ -149,6 +149,21 @@ What does not work:
 - repositories other than those of the server, and anything that is not a published release (no local builds, no
   `.klib` files from disk).
 
+## Syntax errors from the compiler's parser
+
+The Kotlin compiler's own lexer and parser run in the page as Kotlin/Wasm (`kotlin-parser`). They are the
+compiler's multiplatform parser (`compiler/multiplatform-parsing` of the Kotlin repository), taken over unchanged,
+built on IntelliJ's multiplatform syntax library.
+
+- 100 ms after each change the document is parsed and its syntax errors are marked, with the compiler's own words
+  (`Expecting ')'`, `Expecting a top level declaration`). An error at a single position, such as a missing
+  parenthesis, is a small mark where the token belongs; the message shows on hover.
+- This works from the start, without the compiler: nothing of the 75 MB workers is downloaded for it. The parser
+  is three Wasm modules of the application, about 1.3 MB together (the parser 0.5 MB, the syntax library 0.7 MB).
+- Once the compiler is started, the Analysis API checks the text instead and reports syntax errors with everything
+  else.
+- A file of 900 lines is parsed in well under a second.
+
 ## Analysis by the compiler
 
 Once the first run has started the compiler, the Analysis API takes over two things from the editor's own analysis:
@@ -209,6 +224,7 @@ them), `automationSetText`, `automationSelect`, `automationRun` and `automationL
 | `app` | the application: session state, the Compose shell, the plugin loader, the compiler client, the libraries panel and its resolver |
 | `editor-codemirror` | the CodeMirror editor and its Kotlin wrapper |
 | `language-kotlin` | the editor's own analysis of Kotlin text: lexer, symbols, highlighting, completion (multiplatform, with unit tests) |
+| `kotlin-parser` | the Kotlin compiler's multiplatform lexer and parser (`upstream/`, unchanged from the Kotlin repository) and the editor's API over it: syntax errors and the syntax tree |
 | `compiler-host` | builds the Kotlin compiler and the Analysis API into WebAssembly workers (JVM build, needs GraalVM) |
 | `plugin-api` | what plugins and the host share |
 | `worker-rt`, `plugin-worker` | the sandbox: the worker's entry and the host's side of it |

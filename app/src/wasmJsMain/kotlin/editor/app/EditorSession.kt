@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import editor.codemirror.CaretPosition
 import editor.codemirror.CodeEditor
+import editor.kotlinparser.KotlinSyntax
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
@@ -24,6 +25,7 @@ private fun sandboxAllRequested(): Boolean =
     js("new URLSearchParams(globalThis.location.search).get('sandbox') === 'all'")
 
 private const val CHECK_DELAY_MILLISECONDS = 300L
+private const val SYNTAX_CHECK_DELAY_MILLISECONDS = 100L
 private const val SAVE_DELAY_MILLISECONDS = 300L
 
 /** How far the last run of the program has got. */
@@ -124,6 +126,7 @@ class EditorSession {
         // must not save: it would put its old text over what another page has saved since.
         DocumentStore.beforeLeaving { if (saving?.isActive == true) DocumentStore.save(text) }
         if (libraries.isNotEmpty()) prepareLibraries()
+        checkLater()
     }
 
     /** Opens the panel in which the user lists libraries. */
@@ -243,17 +246,29 @@ class EditorSession {
         }
     }
 
-    /** Once the analysis is there, the text is checked again a moment after each change. */
+    /**
+     * Checks the text a moment after each change. Until the compiler is started, the compiler's own parser does it in
+     * the page and finds the syntax errors; from then on the analysis finds those and everything else.
+     */
     private fun checkLater() {
-        val analysis = analysis ?: return
         checking?.cancel()
+        val analysis = analysis
         checking = scope.launch {
+            if (analysis == null) {
+                delay(SYNTAX_CHECK_DELAY_MILLISECONDS)
+                show(syntaxErrors(text))
+                return@launch
+            }
             delay(CHECK_DELAY_MILLISECONDS)
             val source = text
             val answer = analysis.analyze(source)
             if (source == text && answer.error == null) show(answer.diagnostics)
         }
     }
+
+    /** The syntax errors of [source], from the Kotlin compiler's multiplatform parser (kotlin-parser). */
+    private fun syntaxErrors(source: String): List<CompilerDiagnostic> =
+        KotlinSyntax.parse(source).errors.map { CompilerDiagnostic("ERROR", it.message, it.from, it.to) }
 
     private fun show(found: List<CompilerDiagnostic>) {
         diagnostics = found

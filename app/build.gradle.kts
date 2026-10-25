@@ -16,6 +16,7 @@ kotlin {
             implementation(project(":plugin-api"))
             implementation(project(":worker-rt"))
             implementation(project(":editor-codemirror"))
+            implementation(project(":kotlin-parser"))
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.compose.runtime)

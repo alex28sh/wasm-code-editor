@@ -16,6 +16,8 @@ dependencyResolutionManagement {
             content {
                 includeModuleByRegex("org\\.jetbrains\\.kotlin", ".*-for-ide")
                 includeGroupByRegex("org\\.jetbrains\\.intellij\\.deps.*")
+                // IntelliJ's multiplatform syntax library, which the Kotlin parser of kotlin-parser is written against.
+                includeModuleByRegex("org\\.jetbrains", "(syntax-api|multiplatform)(-.*)?")
             }
         }
         maven("https://www.jetbrains.com/intellij-repository/releases") {
@@ -32,6 +34,7 @@ include(":plugin-api")
 include(":worker-rt")
 include(":plugin-worker")
 include(":language-kotlin")
+include(":kotlin-parser")
 include(":editor-codemirror")
 include(":app")
 include(":compiler-host")

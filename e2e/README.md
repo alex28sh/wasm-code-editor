@@ -25,6 +25,7 @@ Two runs at once delete each other's traces in `test-results`; give one of them 
 | `layout.spec.ts` | editor, canvas and gutter geometry at several window sizes and pixel densities, scrolling, resizing |
 | `plugins.spec.ts` | both plugin tiers, worker isolation, termination of a hung plugin, rejection of disallowed imports and broken binaries |
 | `plugin-index.spec.ts` | trust decisions of the plugin index, failing entries, a missing, broken or slow index |
+| `kotlin-parser.spec.ts` | syntax errors from the compiler's parser before the compiler is started, following edits, the syntax tree in the page, its modules |
 | `compiler.spec.ts` | compiling and running the document with Ctrl+Enter, problems marked in the text, completion by the Analysis API; skipped when the distribution has no compiler (see `compiler-host/README.md`) |
 | `persistence.spec.ts` | the document kept in the browser: reload, a page opened later, what was typed just before leaving, missing or full storage |
 | `libraries.spec.ts` | the libraries panel: adding, refusing and removing libraries, their dependencies, failures and their reasons, keeping the list, focus and keys; compiling, analyzing and running a program with a library (skipped without a compiler) |

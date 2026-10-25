@@ -260,6 +260,11 @@ export class EditorApp {
         return (await this.state()).libraries;
     }
 
+    /** The document's syntax tree as the Kotlin compiler's parser builds it in the page, one `TYPE: text` line per node. */
+    async syntaxTree(): Promise<string> {
+        return this.page.evaluate(async module => (await import(module)).automationSyntaxTree(), appModule);
+    }
+
     async text(): Promise<string> {
         return (await this.state()).text;
     }

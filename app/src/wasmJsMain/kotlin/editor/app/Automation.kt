@@ -2,6 +2,7 @@
 
 package editor.app
 
+import editor.kotlinparser.KotlinSyntax
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.promise
 import kotlinx.serialization.Serializable
@@ -66,6 +67,10 @@ fun automationState(): String = Json.encodeToString(
         libraries = session.libraries,
     )
 )
+
+/** The document's syntax tree as the Kotlin compiler's parser builds it in the page, one `TYPE: text` line per node. */
+@JsExport
+fun automationSyntaxTree(): String = KotlinSyntax.parse(session.text).dump()
 
 @JsExport
 fun automationSetText(text: String) {

@@ -42,7 +42,7 @@
   dependencies:
     "@codemirror/streamparser" "^6.0.0"
 
-"@codemirror/lint@^6.0.0":
+"@codemirror/lint@6.9.7", "@codemirror/lint@^6.0.0":
   version "6.9.7"
   resolved "https://registry.yarnpkg.com/@codemirror/lint/-/lint-6.9.7.tgz#841fc733674389d91fe49a1c34027ad3babdf105"
   integrity sha512-28/+iWLYxKxsvGYhSYL7zaCZqLz5+FFFDq9tVsvGv9kv8RY4fFAchJ5WX9M3YrrRlTIsECjsXPqeNgnSmNP2dg==
