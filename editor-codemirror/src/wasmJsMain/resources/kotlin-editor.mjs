@@ -470,6 +470,7 @@ export function createKotlinEditor(doc, host) {
             extensions: [
                 Prec.highest(keymap.of([
                     { key: 'Mod-Enter', run: () => (host.run(), true) },
+                    { key: 'Mod-Alt-Shift-s', run: () => (host.libraries(), true) },
                     { key: 'Mod-b', run: goToDeclaration },
                     { key: 'Alt-F7', run: showUsages },
                     { key: 'Mod-F12', run: showStructure },

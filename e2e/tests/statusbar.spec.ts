@@ -159,6 +159,15 @@ test.describe('status bar', () => {
         await app.statusBarChanged(before);
         await app.expectStatusBar('three-plugins.png');
     });
+});
+
+test.describe('plugin failures in the status bar', () => {
+    // Wide enough for the longer failure message to fit in one line next to the buttons.
+    test.use({ viewport: { width: 1600, height: 800 } });
+
+    test.beforeEach(async ({ app }) => {
+        await app.open();
+    });
 
     test('adds a line for each plugin failure and gives it room by shrinking the editor', async ({ app }) => {
         const height = async () => (await app.statusBarClip()).height;
@@ -222,6 +231,23 @@ test.describe('caret position in the status bar', () => {
         await expect.poll(async () => (await app.state()).caret.carets).toBe(2);
         await app.statusBarChanged(single);
         await app.expectStatusBar('carets.png');
+    });
+});
+
+test.describe('libraries in the status bar', () => {
+    test('the button counts the libraries, in red when one failed', async ({ app, page }) => {
+        await app.open();
+        await app.addLibrary('org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0');
+        await app.librariesSettled();
+        await page.keyboard.press('Escape');
+        await app.expectStatusBar('one-library.png');
+
+        const one = await app.statusBar();
+        await app.addLibrary('org.example:plain:1.0');
+        await app.librariesSettled();
+        await page.keyboard.press('Escape');
+        await app.statusBarChanged(one);
+        await app.expectStatusBar('failed-library.png');
     });
 });
 

@@ -71,4 +71,13 @@ test.describe('appearance', () => {
 
         await expect(page).toHaveScreenshot('folded-completion.png');
     });
+
+    test('libraries panel with a loaded library and one that failed', async ({ app, page }) => {
+        await app.open();
+        await app.addLibrary('org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0');
+        await app.addLibrary('org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.11.0');
+        await app.librariesSettled();
+
+        await expect(page).toHaveScreenshot('libraries.png');
+    });
 });

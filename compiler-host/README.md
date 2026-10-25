@@ -83,9 +83,18 @@ Both hosts answer `call(operation, first, second)` with JSON. A failure is answe
 | Image | Operation | Arguments | Answer |
 |---|---|---|---|
 | both | `init` | the standard library archive in Base64 | `{"files": n}` |
+| both | `libraries` | an archive of the other libraries in Base64, or nothing | `{"libraries": n, "files": n}` |
 | compiler | `compile` | source | `{"ok", "exitCode", "milliseconds", "diagnostics": [...], "files": [{"name", "content"}]}`, the content in Base64 |
 | analysis | `analyze` | source | `{"diagnostics": [...]}` |
 | analysis | `complete` | source, offset | `{"from", "items": [{"label", "kind", "detail"}]}` |
+
+`libraries` replaces the libraries besides the standard library; an empty argument leaves the standard library
+alone. The archive has the format of the standard library's, and every entry name starts with a directory of its
+own for each klib, `0-atomicfu-wasm-js-0.32.1/default/manifest`, the klibs in the order of their dependencies.
+The compiler gets them all with `-libraries`; the analysis makes a library module of each, which depends on the
+standard library and on the libraries before it. The editor makes the archive in the page from what the user lists
+(`app/src/wasmJsMain/resources/kotlin-libraries.mjs`); the build makes one of `kotlinx-coroutines-core` for the
+scenarios (`scenarioLibraryArchive`).
 
 A diagnostic is `{"severity": "ERROR" or "WARNING", "message", "from", "to"}` with offsets into the source.
 The compiled files are `main.wasm`, `main.mjs`, `main.import-object.mjs` and `main.js-builtins.mjs`.
@@ -121,7 +130,8 @@ a `NoClassDefFoundError` or an `ExceptionInInitializerError`, while the same req
 This happened with KDoc comments: the first scenarios had none, and completion failed in any document with one.
 
 `src/scenario/shapes.kt` is a program with most kinds of declarations, expressions and comments; both scenarios
-compile or analyze it. When something fails only in the image, add code like it to that file or a request to
+compile or analyze it. Both also load `kotlinx-coroutines-core` with `libraries`, compile or analyze a program
+that uses it, and remove it again; `imageTest` runs that program under Node.js. When something fails only in the image, add code like it to that file or a request to
 `JvmScenario.kt` or `AnalysisScenario.kt`, and rebuild.
 
 ## What Web Image cannot do, and what is done about it
@@ -207,7 +217,8 @@ Facts about the image at run time:
   files will need the session kept between requests.
 - The reachability metadata covers what the scenarios cover, as described above.
 - Two downloads of 75 MB each and a 12 MB library on the first run, fetched once per page.
-- One file and the standard library only: no other libraries, no multiple files.
+- One file, compiled against the standard library and the libraries the editor sends; no multiple files, and no
+  compiler plugins, so libraries that need one (`kotlinx-serialization`, Compose) do not work.
 - Compiler plugins, scripting and the other compiler back ends are in the images but were never exercised.
 
 ## Updating the Kotlin version

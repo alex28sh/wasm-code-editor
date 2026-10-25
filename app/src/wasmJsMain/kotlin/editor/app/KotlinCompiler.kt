@@ -47,6 +47,14 @@ private val format = Json { ignoreUnknownKeys = true }
 internal class KotlinCompiler {
     private val service = createKotlinService("compiler")
 
+    /**
+     * Replaces the libraries besides the standard library with those in [archive] (Base64; empty for none).
+     * The worker answers requests in order, so a compilation asked for after this uses them.
+     */
+    fun setLibraries(archive: String) {
+        service.request("libraries", archive, "")
+    }
+
     suspend fun compile(source: String): Compilation {
         val json = service.request("compile", source, "").await<JsString>().toString()
         return Compilation(format.decodeFromString(json), json)
@@ -56,6 +64,11 @@ internal class KotlinCompiler {
 /** The Analysis API, in a worker of its own: it answers while the compiler is busy, and is as large a download. */
 internal class KotlinAnalysis {
     private val service = createKotlinService("analysis")
+
+    /** Replaces the libraries the text is analyzed against, as [KotlinCompiler.setLibraries] does. */
+    fun setLibraries(archive: String) {
+        service.request("libraries", archive, "")
+    }
 
     /** The errors and warnings of [source]. */
     suspend fun analyze(source: String): CompilerAnswer =

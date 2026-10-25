@@ -42,6 +42,20 @@ fun main() {
 }
 """
 
+private const val COROUTINES = """
+import kotlinx.coroutines.*
+
+suspend fun main() = coroutineScope {
+    val squares = (1..3).map { n -> async { delay(10L * (4 - n)); n * n } }
+    println("Squares: " + squares.awaitAll())
+    launch {
+        delay(5)
+        println("Launched")
+    }
+    println("Waiting")
+}
+"""
+
 /**
  * Runs the requests the editor makes, on the JVM.
  *
@@ -69,6 +83,14 @@ fun main(arguments: Array<String>) {
     // As many kinds of declarations, expressions and comments as fit, for the sake of what the agent records.
     val shapes = Path.of(arguments[1]).readText()
     request("compile everything", "compile", shapes, expected = "\"ok\":true")
+
+    // A library the user added, and then removed again.
+    request("compile without the library", "compile", COROUTINES, expected = "Unresolved reference 'kotlinx'")
+    request("libraries", "libraries", Base64.getEncoder().encodeToString(Path.of(arguments[2]).readBytes()), expected = "\"libraries\":2")
+    request("compile with the library", "compile", COROUTINES, expected = "\"ok\":true")
+    request("compile without using the library", "compile", HELLO, expected = "\"ok\":true")
+    request("no libraries", "libraries", "", expected = "\"libraries\":0")
+    request("compile after removing the library", "compile", COROUTINES, expected = "Unresolved reference 'kotlinx'")
 
     if (failures.isNotEmpty()) {
         failures.forEach(System.err::println)

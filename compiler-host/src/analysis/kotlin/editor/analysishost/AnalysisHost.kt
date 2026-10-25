@@ -49,23 +49,29 @@ private class Completion(val label: String, val kind: String, val detail: String
 /**
  * The Analysis API over one source file for the Wasm target, behind string requests answered in JSON.
  *
- * Everything lives under [root]: the standard library as an unpacked klib and the file being worked on.
+ * Everything lives under [root]: the standard library and the other libraries as unpacked klibs, and the file being
+ * worked on.
  */
 @OptIn(ExperimentalPathApi::class)
 class AnalysisHost(private val root: Path) {
     private val stdlib = root.resolve("lib/stdlib")
+    private val libraryRoot = root.resolve("lib/user")
+
+    /** The unpacked klibs of the libraries, dependencies first. */
+    private var libraries: List<Path> = emptyList()
 
     init {
         System.setProperty("java.awt.headless", "true")
     }
 
     /**
-     * `init(archive in Base64)`, `analyze(source)` and `complete(source, offset)`.
+     * `init(archive in Base64)`, `libraries(archive in Base64)`, `analyze(source)` and `complete(source, offset)`.
      * A failure is answered as `{"error": ...}` so that one bad request does not take the host down.
      */
     fun handle(operation: String, first: String, second: String): String = try {
         when (operation) {
             "init" -> installStandardLibrary(Base64.getDecoder().decode(first))
+            "libraries" -> installLibraries(Base64.getDecoder().decode(first))
             "analyze" -> analyze(first)
             "complete" -> complete(first, second.toInt())
             else -> error("Unknown operation '$operation'")
@@ -84,6 +90,37 @@ class AnalysisHost(private val root: Path) {
             file.writeBytes(ByteArray(input.readInt()).also(input::readFully))
         }
         return json { field("files", count) }
+    }
+
+    /**
+     * Replaces the libraries the document may use besides the standard library.
+     *
+     * The archive has the format of the standard library's, and every entry name starts with the directory of its
+     * klib: `0-atomicfu-wasm-js/default/manifest`. The klibs come in the order of their dependencies.
+     * An empty archive leaves only the standard library.
+     */
+    fun installLibraries(archive: ByteArray): String {
+        libraryRoot.deleteRecursively()
+        val directories = LinkedHashSet<String>()
+        var count = 0
+        if (archive.isNotEmpty()) {
+            val input = DataInputStream(ByteArrayInputStream(archive))
+            count = input.readInt()
+            repeat(count) {
+                val name = input.readUTF()
+                val segments = name.split('/')
+                require(segments.size > 1 && segments.none { it.isEmpty() || it == "." || it == ".." }) { "Bad entry name in the library archive: $name" }
+                directories += segments.first()
+                val file = libraryRoot.resolve(name)
+                file.parent.createDirectories()
+                file.writeBytes(ByteArray(input.readInt()).also(input::readFully))
+            }
+        }
+        libraries = directories.map(libraryRoot::resolve)
+        return json {
+            field("libraries", libraries.size)
+            field("files", count)
+        }
     }
 
     private fun analyze(source: String): String {
@@ -147,7 +184,7 @@ class AnalysisHost(private val root: Path) {
         }
     }
 
-    /** Runs [action] in an analysis session over [source] as the only file of a module that depends on the standard library. */
+    /** Runs [action] in an analysis session over [source] as the only file of a module that depends on the libraries. */
     private fun <R> withAnalysis(source: String, action: KaSession.(KtFile) -> R): R {
         val sources = root.resolve("analysis/src").apply { deleteRecursively() }.createDirectories()
         sources.resolve(FILE_NAME).writeText(source)
@@ -156,16 +193,26 @@ class AnalysisHost(private val root: Path) {
             val session = buildStandaloneAnalysisAPISession(disposable) {
                 buildKtModuleProvider {
                     platform = WasmPlatforms.wasmJs
-                    val library = addModule(buildKtLibraryModule {
+                    val standardLibrary = addModule(buildKtLibraryModule {
                         platform = WasmPlatforms.wasmJs
                         addBinaryRoot(stdlib)
                         libraryName = "stdlib"
                     })
+                    // Each library sees the standard library and the libraries before it, which include its dependencies.
+                    val dependencies = mutableListOf(standardLibrary)
+                    for (klib in libraries) {
+                        dependencies += addModule(buildKtLibraryModule {
+                            platform = WasmPlatforms.wasmJs
+                            addBinaryRoot(klib)
+                            libraryName = klib.fileName.toString()
+                            dependencies.toList().forEach(::addRegularDependency)
+                        })
+                    }
                     addModule(buildKtSourceModule {
                         platform = WasmPlatforms.wasmJs
                         moduleName = "main"
                         addSourceRoot(sources)
-                        addRegularDependency(library)
+                        dependencies.forEach(::addRegularDependency)
                     })
                 }
             }

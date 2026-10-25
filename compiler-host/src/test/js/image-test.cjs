@@ -1,4 +1,5 @@
-// Drives the WebAssembly image under Node the way the browser worker does: `node image-test.cjs <compilerDist>`.
+// Drives the WebAssembly image under Node the way the browser worker does:
+// `node image-test.cjs <compilerDist> <library archive>`.
 // Exits with an error when the compiler does not answer as expected or its output does not run.
 const fs = require('node:fs');
 const os = require('node:os');
@@ -23,6 +24,20 @@ fun main() {
 }
 `;
 
+const coroutines = `
+import kotlinx.coroutines.*
+
+suspend fun main() = coroutineScope {
+    val squares = (1..3).map { n -> async { delay(10L * (4 - n)); n * n } }
+    println("Squares: " + squares.awaitAll())
+    launch {
+        delay(5)
+        println("Launched")
+    }
+    println("Waiting")
+}
+`;
+
 function request(title, operation, first, expected) {
     const started = Date.now();
     const answer = globalThis.kotlinCompilerHost.call(operation, first, '');
@@ -44,6 +59,18 @@ function run() {
     const output = execFileSync(process.execPath, [path.join(directory, 'main.mjs')], { encoding: 'utf8' });
     console.log(`program output: ${output.trim()}`);
     if (output.trim() !== 'Hello, Wasm!') throw new Error(`Unexpected program output: ${output}`);
+
+    // A library the user added, and then removed again.
+    request('compile without the library', 'compile', coroutines, "Unresolved reference 'kotlinx'");
+    request('libraries', 'libraries', fs.readFileSync(path.resolve(process.argv[3])).toString('base64'), '"libraries":2');
+    const withLibrary = request('compile with the library', 'compile', coroutines, '"ok":true');
+    const libraryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'compiler-host-'));
+    for (const file of withLibrary.files) fs.writeFileSync(path.join(libraryDirectory, file.name), Buffer.from(file.content, 'base64'));
+    const libraryOutput = execFileSync(process.execPath, [path.join(libraryDirectory, 'main.mjs')], { encoding: 'utf8' });
+    console.log(`program output: ${libraryOutput.trim().replaceAll('\n', ' | ')}`);
+    if (libraryOutput !== 'Squares: [1, 4, 9]\nWaiting\nLaunched\n') throw new Error(`Unexpected program output: ${libraryOutput}`);
+    request('no libraries', 'libraries', '', '"libraries":0');
+    request('compile after removing the library', 'compile', coroutines, "Unresolved reference 'kotlinx'");
 }
 
 function whenReady(attempt) {

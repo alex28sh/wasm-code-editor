@@ -1,4 +1,5 @@
-// Drives the Analysis API image under Node the way the browser worker does: `node analysis-image-test.cjs <compilerDist>`.
+// Drives the Analysis API image under Node the way the browser worker does:
+// `node analysis-image-test.cjs <compilerDist> <library archive>`.
 // Exits with an error when an answer is not the expected one.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -34,6 +35,15 @@ fun main() {
 }
 `;
 
+const coroutines = `
+import kotlinx.coroutines.*
+
+suspend fun main() = coroutineScope {
+    launch { del }
+    Job().can
+}
+`;
+
 const after = (text, marker) => String(text.indexOf(marker) + marker.length);
 
 function request(title, operation, first, second, expected) {
@@ -57,6 +67,16 @@ function run() {
     // What the library keeps to itself is not offered.
     const answer = globalThis.kotlinAnalysisHost.call('complete', hello, after(hello, '    print'));
     if (answer.includes('printlnImpl')) throw new Error(`An internal function is offered: ${answer.slice(0, 2000)}`);
+
+    // A library the user added, and then removed again.
+    const libraries = fs.readFileSync(path.resolve(process.argv[3])).toString('base64');
+    request('analyze without the library', 'analyze', coroutines, '', "Unresolved reference 'kotlinx'");
+    request('libraries', 'libraries', libraries, '', '"libraries":2');
+    request('analyze with the library', 'analyze', coroutines, '', "Unresolved reference 'can'");
+    request('complete a library function', 'complete', coroutines, after(coroutines, 'del'), '"label":"delay"');
+    request('complete a library member', 'complete', coroutines, after(coroutines, 'Job().can'), '"label":"cancel"');
+    request('no libraries', 'libraries', '', '', '"libraries":0');
+    request('analyze after removing the library', 'analyze', coroutines, '', "Unresolved reference 'kotlinx'");
 }
 
 function whenReady(attempt) {

@@ -13,6 +13,10 @@ export interface AppState {
     diagnostics: { severity: string; message: string; from: number; to: number }[];
     /** Where Compose draws the Run button, in CSS pixels. */
     runButton: { x: number; y: number; width: number; height: number } | null;
+    /** Where Compose draws the Libraries button. */
+    librariesButton: { x: number; y: number; width: number; height: number } | null;
+    /** The libraries listed in the libraries panel; `message` is there when one failed, `klibs` when it loaded. */
+    libraries: { coordinates: string; state: 'resolving' | 'ready' | 'failed'; message?: string; klibs?: string[] }[];
 }
 
 export interface ConsoleEntry {
@@ -231,6 +235,29 @@ export class EditorApp {
     async clickRunButton(): Promise<void> {
         const button = (await this.state()).runButton!;
         await this.page.mouse.click(button.x + button.width / 2, button.y + button.height / 2);
+    }
+
+    async clickLibrariesButton(): Promise<void> {
+        const button = (await this.state()).librariesButton!;
+        await this.page.mouse.click(button.x + button.width / 2, button.y + button.height / 2);
+    }
+
+    /** The libraries panel, while it is open. */
+    get librariesPanel(): Locator {
+        return this.page.getByRole('dialog', { name: 'Libraries' });
+    }
+
+    /** Adds a library in the panel, opening it first when it is closed; does not wait for the library to load. */
+    async addLibrary(coordinates: string): Promise<void> {
+        if (!(await this.librariesPanel.isVisible())) await this.clickLibrariesButton();
+        await this.librariesPanel.getByLabel('Maven coordinates').fill(coordinates);
+        await this.librariesPanel.getByRole('button', { name: 'Add' }).click();
+    }
+
+    /** Waits until no library is loading any more and returns them. */
+    async librariesSettled(): Promise<AppState['libraries']> {
+        await expect.poll(async () => (await this.state()).libraries.some(library => library.state === 'resolving'), { timeout: 30_000 }).toBe(false);
+        return (await this.state()).libraries;
     }
 
     async text(): Promise<string> {

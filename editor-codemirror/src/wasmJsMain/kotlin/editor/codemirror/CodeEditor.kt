@@ -43,8 +43,9 @@ private fun kotlinHost(
     completions: (Int, String) -> JsArray<JsAny>,
     semanticCompletions: (Int) -> JsAny?,
     run: () -> Unit,
+    libraries: () -> Unit,
 ): JsAny = js(
-    "({ highlightClasses, analyze, changed, selectionChanged, highlights, occurrences, declaration, structure, enclosing, foldRange, completions, semanticCompletions, run })"
+    "({ highlightClasses, analyze, changed, selectionChanged, highlights, occurrences, declaration, structure, enclosing, foldRange, completions, semanticCompletions, run, libraries })"
 )
 
 /** Where the caret is: [line] and [column] count from one. */
@@ -70,6 +71,8 @@ class CodeEditor(
     onCaretMoved: (CaretPosition) -> Unit = {},
     /** Ctrl+Enter was pressed. */
     onRunRequested: () -> Unit = {},
+    /** Ctrl+Alt+Shift+S was pressed, IntelliJ's key for the structure of the project. */
+    onLibrariesRequested: () -> Unit = {},
 ) {
     private var source = initialText
     private val scope = MainScope()
@@ -117,6 +120,7 @@ class CodeEditor(
                 }
             },
             run = onRunRequested,
+            libraries = onLibrariesRequested,
         )
     )
 

@@ -89,4 +89,32 @@ test.describe('static server', () => {
             expect([403, 404], path).toContain(response.status());
         }
     });
+
+    test('answers 400 for a path that is not valid percent-encoding', async ({ request }) => {
+        const response = await request.get('/%E0%A4%A');
+
+        expect(response.status()).toBe(400);
+        // The server is still there.
+        expect((await request.get('/plugins.json')).status()).toBe(200);
+    });
+});
+
+test.describe('Maven proxy', () => {
+    test('passes the files of a repository on', async ({ request }) => {
+        const response = await request.get('/maven/org/jetbrains/kotlinx/atomicfu/0.32.1/atomicfu-0.32.1.module');
+
+        expect(response.status()).toBe(200);
+        expect((await response.json()).variants.length).toBeGreaterThan(0);
+        expect(response.headers()['cache-control']).toBe('no-store');
+    });
+
+    test('answers 404 for what no repository has', async ({ request }) => {
+        expect((await request.get('/maven/org/example/missing/1.0/missing-1.0.module')).status()).toBe(404);
+    });
+
+    test('refuses paths that a repository layout does not have', async ({ request }) => {
+        for (const path of ['/maven/org/..%2F..%2F..%2Fsettings.gradle.kts', '/maven/org/example/a b/1.0', '/maven/']) {
+            expect((await request.get(path)).status(), path).toBe(400);
+        }
+    });
 });

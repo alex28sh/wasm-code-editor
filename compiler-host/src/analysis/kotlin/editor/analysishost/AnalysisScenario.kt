@@ -34,6 +34,19 @@ fun main() {
 }
 """
 
+private const val COROUTINES = """
+import kotlinx.coroutines.*
+
+suspend fun main() = coroutineScope {
+    launch {
+        delay(5)
+        println("Launched")
+    }
+    val job = Job()
+    job.can
+}
+"""
+
 /** Runs the requests the editor would make to the Analysis API, on the JVM, and fails when an answer is not the expected one. */
 fun main(arguments: Array<String>) {
     val host = AnalysisHost(Files.createTempDirectory("analysis-host"))
@@ -62,6 +75,15 @@ fun main(arguments: Array<String>) {
     request("complete in everything", "complete", shapes, after(shapes, "    println(larg"), expected = "\"label\":\"largest\"")
     request("complete a library member in everything", "complete", shapes, after(shapes, "text!!.len"), expected = "\"label\":\"length\"")
     request("complete an enum", "complete", shapes, after(shapes, "Scale.MET"), expected = "\"label\":\"METER\"")
+
+    // A library the user added, and then removed again.
+    request("analyze without the library", "analyze", COROUTINES, expected = "Unresolved reference 'kotlinx'")
+    request("libraries", "libraries", Base64.getEncoder().encodeToString(Path.of(arguments[2]).readBytes()), expected = "\"libraries\":2")
+    request("analyze with the library", "analyze", COROUTINES, expected = "Unresolved reference 'can'")
+    request("complete a library member", "complete", COROUTINES, after(COROUTINES, "job.can"), expected = "\"label\":\"cancel\"")
+    request("complete a library function", "complete", COROUTINES, after(COROUTINES, "        del"), expected = "\"label\":\"delay\"")
+    request("no libraries", "libraries", "", expected = "\"libraries\":0")
+    request("analyze after removing the library", "analyze", COROUTINES, expected = "Unresolved reference 'kotlinx'")
 
     if (failures.isNotEmpty()) {
         failures.forEach(System.err::println)

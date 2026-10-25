@@ -8,6 +8,7 @@ import editor.codemirror.CodeEditor
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.await
 import kotlinx.coroutines.launch
 
 private val sampleText = """
@@ -27,6 +28,8 @@ private const val SAVE_DELAY_MILLISECONDS = 300L
 
 /** How far the last run of the program has got. */
 enum class RunState(val title: String, val inProgress: Boolean = false, val failed: Boolean = false) {
+    LOADING_LIBRARIES("Loading libraries", inProgress = true),
+    LIBRARIES_FAILED("Libraries failed", failed = true),
     COMPILING("Compiling", inProgress = true),
     RUNNING("Running", inProgress = true),
     FINISHED("Finished"),
@@ -80,6 +83,23 @@ class EditorSession {
     /** Where the Run button is; the tests need it to click what is only drawn. */
     internal var runButtonBounds: ButtonBounds? = null
 
+    /** Where the Libraries button is. */
+    internal var librariesButtonBounds: ButtonBounds? = null
+
+    /** The libraries the user listed, besides the standard library, in the order they were added. */
+    var libraries by mutableStateOf(LibraryStore.load().map { Library(it, LibraryState.RESOLVING) })
+        private set
+
+    /** The klibs of the libraries that loaded, for the compiler and the analysis; empty when there are none. */
+    private var librariesArchive = ""
+    private var preparingLibraries: Job? = null
+
+    private val librariesPanel = LibrariesPanelModule.createLibrariesPanel(
+        add = ::addLibrary,
+        remove = ::removeLibrary,
+        closed = { editor.focus() },
+    )
+
     private val scope = MainScope()
     private var compiler: KotlinCompiler? = null
     private var analysis: KotlinAnalysis? = null
@@ -96,12 +116,61 @@ class EditorSession {
         },
         onCaretMoved = { caret = it },
         onRunRequested = { run() },
+        onLibrariesRequested = { openLibraries() },
     )
 
     init {
         // A change made just before the page goes away has not been saved yet. A page without such a change
         // must not save: it would put its old text over what another page has saved since.
         DocumentStore.beforeLeaving { if (saving?.isActive == true) DocumentStore.save(text) }
+        if (libraries.isNotEmpty()) prepareLibraries()
+    }
+
+    /** Opens the panel in which the user lists libraries. */
+    fun openLibraries() {
+        librariesPanel.open()
+        librariesPanel.render(librariesJson(libraries))
+    }
+
+    /** Adds the library with the Maven coordinates [text]; answers why it cannot, or an empty string. */
+    fun addLibrary(text: String): String {
+        val coordinates = text.trim()
+        libraryProblem(coordinates, libraries)?.let { return it }
+        updateLibraries(libraries + Library(coordinates, LibraryState.RESOLVING))
+        LibraryStore.save(libraries.map { it.coordinates })
+        prepareLibraries()
+        return ""
+    }
+
+    fun removeLibrary(coordinates: String) {
+        updateLibraries(libraries.filter { it.coordinates != coordinates })
+        LibraryStore.save(libraries.map { it.coordinates })
+        prepareLibraries()
+    }
+
+    private fun updateLibraries(value: List<Library>) {
+        libraries = value
+        librariesPanel.render(librariesJson(value))
+    }
+
+    /** Resolves and downloads the listed libraries anew, and hands them to the compiler and the analysis. */
+    private fun prepareLibraries() {
+        preparingLibraries?.cancel()
+        updateLibraries(libraries.map { Library(it.coordinates, LibraryState.RESOLVING) })
+        val requested = libraries.map { it.coordinates }
+        preparingLibraries = scope.launch {
+            val answer = parsePreparedLibraries(
+                KotlinLibrariesModule.prepareLibraries(coordinatesJson(requested)).await<JsString>().toString()
+            )
+            updateLibraries(answer.libraries.map {
+                if (it.error != null) Library(it.coordinates, LibraryState.FAILED, it.error)
+                else Library(it.coordinates, LibraryState.READY, klibs = it.klibs)
+            })
+            librariesArchive = answer.archive
+            compiler?.setLibraries(librariesArchive)
+            analysis?.setLibraries(librariesArchive)
+            checkLater()
+        }
     }
 
     /** Saves the text a moment after the last change, not on every keystroke. */
@@ -121,6 +190,15 @@ class EditorSession {
 
     private suspend fun compileAndRun() {
         val compiler = compiler ?: startCompiler()
+        while (preparingLibraries?.isActive == true) {
+            console = RunConsole(RunState.LOADING_LIBRARIES)
+            preparingLibraries?.join()
+        }
+        val failed = libraries.filter { it.state == LibraryState.FAILED }
+        if (failed.isNotEmpty()) {
+            console = RunConsole(RunState.LIBRARIES_FAILED, errors = failed.map { "${it.coordinates}: ${it.message}" })
+            return
+        }
         val source = text
         console = RunConsole(RunState.COMPILING)
         val compilation = compiler.compile(source)
@@ -156,7 +234,13 @@ class EditorSession {
             editor.semanticCompletions = { source, offset -> analysis.complete(source, offset) }
         }
         compilerStatus = "loading"
-        return KotlinCompiler().also { compiler = it }
+        return KotlinCompiler().also { compiler = it }.also {
+            // Libraries loaded before the compiler was there; those that load later are sent when they are ready.
+            if (librariesArchive.isNotEmpty()) {
+                it.setLibraries(librariesArchive)
+                analysis?.setLibraries(librariesArchive)
+            }
+        }
     }
 
     /** Once the analysis is there, the text is checked again a moment after each change. */

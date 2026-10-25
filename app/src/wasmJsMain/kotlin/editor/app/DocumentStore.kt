@@ -3,10 +3,10 @@ package editor.app
 private const val KEY = "wasm-code-editor.document"
 
 // The storage is missing or refuses to work in some private modes and when it is full; the editor works without it.
-private fun readItem(key: String): String? =
+internal fun readItem(key: String): String? =
     js("{ try { return globalThis.localStorage.getItem(key) } catch (e) { return null } }")
 
-private fun writeItem(key: String, value: String): Unit =
+internal fun writeItem(key: String, value: String): Unit =
     js("{ try { globalThis.localStorage.setItem(key, value) } catch (e) {} }")
 
 private fun onPageHidden(action: () -> Unit): Unit =

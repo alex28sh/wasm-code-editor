@@ -185,10 +185,50 @@ val e2eDist by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("e2eDist"))
 }
 
+// A Maven repository for the tests of the libraries panel, so that they need no network once it is built:
+// serve.mjs passes the page's `/maven/` requests to it. It holds coroutines with its dependency, a library of another
+// platform, a library without Gradle module metadata and a version list. The files are downloaded as they are:
+// Gradle chooses a variant even for `@klib` and finds two (GR-1 in docs/problem-log.md).
+val e2eMaven by tasks.registering {
+    description = "Assembles the Maven repository the end-to-end tests download libraries from"
+    group = "verification"
+    val coroutines = libs.versions.kotlinx.coroutines.get()
+    val files = listOf(
+        "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutines:module",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-core-wasm-js:$coroutines:module",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-core-wasm-js:$coroutines:klib",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:$coroutines:module",
+        "org.jetbrains.kotlinx:atomicfu:0.32.1:module",
+        "org.jetbrains.kotlinx:atomicfu-wasm-js:0.32.1:module",
+        "org.jetbrains.kotlinx:atomicfu-wasm-js:0.32.1:klib",
+    )
+    val output = layout.buildDirectory.dir("e2eMaven")
+    inputs.property("files", files)
+    outputs.dir(output)
+    doLast {
+        val repository = output.get().asFile.apply { mkdirs() }
+        for (coordinates in files) {
+            val (group, module, version, extension) = coordinates.split(':')
+            val path = "${group.replace('.', '/')}/$module/$version/$module-$version.$extension"
+            val target = repository.resolve(path)
+            if (target.exists()) continue
+            target.parentFile.mkdirs()
+            uri("https://repo1.maven.org/maven2/$path").toURL().openStream().use { input -> target.outputStream().use(input::copyTo) }
+        }
+        repository.resolve("org/example/plain/1.0/plain-1.0.pom").apply { parentFile.mkdirs() }.writeText(
+            "<project><modelVersion>4.0.0</modelVersion><groupId>org.example</groupId><artifactId>plain</artifactId><version>1.0</version></project>\n"
+        )
+        repository.resolve("org/jetbrains/kotlinx/kotlinx-coroutines-core/maven-metadata.xml").writeText(
+            "<metadata><groupId>org.jetbrains.kotlinx</groupId><artifactId>kotlinx-coroutines-core</artifactId>" +
+                "<versioning><latest>$coroutines</latest><release>$coroutines</release><versions><version>$coroutines</version></versions></versioning></metadata>\n"
+        )
+    }
+}
+
 tasks.register<Exec>("e2eTest") {
     description = "Runs the browser tests in e2e/ against the end-to-end distribution (needs Node.js and Chrome)"
     group = "verification"
-    dependsOn(e2eDist)
+    dependsOn(e2eDist, e2eMaven)
     workingDir = file("e2e")
     commandLine("npx", "playwright", "test")
 }

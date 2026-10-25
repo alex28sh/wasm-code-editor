@@ -710,6 +710,79 @@ Web Image is experimental. The workarounds are described together in
   was cut off by `| head` keeps going in the background, which is how two runs came to overlap.
 - **Here**: give one of the runs `--output=<another directory>`, and do not pipe a run into `head`.
 
+### PW-3. Encoded dots in a request path are taken as `..`
+
+- **Seen**: 2026-10-17, Playwright 1.64.0, Node.js 26.9.0.
+- **Symptom**: a test meant to check that the Maven proxy of `serve.mjs` refuses `..` got `404` instead of
+  `400`: the server never saw the dots.
+- **Code**: `e2e/tests/distribution.spec.ts`, first version:
+
+  ```ts
+  await request.get('/maven/org/%2E%2E/%2E%2E/settings.gradle.kts')
+  ```
+
+  The same in Node.js: `new URL('http://localhost/maven/org/%2E%2E/%2E%2E/settings.gradle.kts').pathname` is
+  `/settings.gradle.kts`.
+- **Cause**: verified with the line above. The URL Standard treats `%2e%2e` as a `..` segment when it parses a
+  URL, so the request goes to `/settings.gradle.kts`. This is standard behaviour, not a Playwright bug, but it
+  means such a test never reaches the check it is meant for.
+- **Here**: the tests encode the slash instead (`..%2F..%2F`), which survives parsing and is decoded by the
+  server.
+
+## Gradle
+
+### GR-1. A dependency with `@klib` still has its variant chosen, and fails as ambiguous
+
+- **Seen**: 2026-10-17, Gradle 9.7.1, in this build (which has the Kotlin Gradle plugin on its classpath).
+- **Symptom**:
+
+  ```
+  > Could not resolve all files for configuration ':reproArtifacts'.
+     > Could not resolve org.jetbrains.kotlinx:atomicfu-wasm-js:0.32.1.
+       Required by:
+           root project 'wasm-code-editor'
+        > Cannot choose between the available variants of org.jetbrains.kotlinx:atomicfu-wasm-js:0.32.1
+          The only attribute distinguishing these variants is 'org.gradle.usage'. Add this attribute to the consumer's configuration to resolve the ambiguity:
+            - Value: 'kotlin-api' selects variant: 'wasmJsApiElements-published'
+            - Value: 'kotlin-runtime' selects variant: 'wasmJsRuntimeElements-published'
+  ```
+
+- **Code**: added for the reproduction to the root `build.gradle.kts`, and removed again:
+
+  ```kotlin
+  val reproArtifacts: Configuration by configurations.creating { isTransitive = false }
+  dependencies {
+      reproArtifacts("org.jetbrains.kotlinx:atomicfu:0.32.1@module")
+      reproArtifacts("org.jetbrains.kotlinx:atomicfu-wasm-js:0.32.1@klib")
+  }
+  ```
+
+- **Cause**: verified as far as this: the artifact notation (`@klib`) does not keep Gradle from reading the module's
+  Gradle metadata and choosing a variant, and a configuration without attributes matches two. `@module` on its
+  own downloads the `.module` file in a project without plugins. Whether this is intended was not looked up.
+- **Here**: `e2eMaven` in the root `build.gradle.kts` downloads the files of its test repository from Maven
+  Central by URL, which also keeps the `.module` files exactly as published.
+
+## Maven Central
+
+### MVN-1. Pages of other sites cannot read the repository
+
+- **Seen**: 2026-10-17.
+- **Symptom**: the response has no CORS header, so a browser does not let a page from `localhost` read it.
+  Checked with:
+
+  ```
+  curl -sI -H "Origin: http://localhost:8787" https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core/1.11.0/kotlinx-coroutines-core-1.11.0.module
+  ```
+
+  which answers `HTTP/2 200` and `content-type: application/vnd.org.gradle.module+json` without any
+  `access-control-allow-origin`; `repo.maven.apache.org` answers the same. The browser's own message was not
+  captured: the page was never pointed at the repository directly.
+- **Cause**: verified by the headers above; it is how the repository is served, not a bug.
+- **Here**: the libraries panel downloads from `./maven/` of the page, and `e2e/serve.mjs` passes those requests
+  on to Maven Central and Google's repository (`MAVEN_REPOSITORIES` changes the list). A page served by anything
+  else needs a proxy like it to load libraries.
+
 ## Adding an entry
 
 Add an entry when a tool or a library does something its documentation or common sense does not predict and the

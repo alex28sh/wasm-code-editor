@@ -9,7 +9,7 @@ import org.jetbrains.kotlin.cli.js.KotlinWasmCompiler
 import org.jetbrains.kotlin.config.Services
 import java.io.ByteArrayInputStream
 import java.io.DataInputStream
-import java.nio.file.Files
+import java.io.File
 import java.nio.file.Path
 import java.util.Base64
 import kotlin.io.path.createDirectories
@@ -29,13 +29,17 @@ private class Diagnostic(val severity: String, val message: String, val from: In
 /**
  * The Kotlin compiler for the Wasm target over one source file, behind string requests.
  *
- * Everything lives under [root]: the standard library as an unpacked klib, the file being worked on and
- * what the compiler writes. The answers are JSON.
+ * Everything lives under [root]: the standard library and the other libraries as unpacked klibs, the file being
+ * worked on and what the compiler writes. The answers are JSON.
  */
 @OptIn(ExperimentalPathApi::class)
 class CompilerHost(private val root: Path) {
     private val stdlib = root.resolve("lib/stdlib")
+    private val libraryRoot = root.resolve("lib/user")
     private val home = root.resolve("home")
+
+    /** The unpacked klibs of the libraries, dependencies first. */
+    private var libraries: List<Path> = emptyList()
 
     init {
         // The message renderer asks the terminal about colors through a native call.
@@ -44,12 +48,13 @@ class CompilerHost(private val root: Path) {
     }
 
     /**
-     * `init(archive in Base64)` and `compile(source)`.
+     * `init(archive in Base64)`, `libraries(archive in Base64)` and `compile(source)`.
      * A failure is answered as `{"error": ...}` so that one bad request does not take the host down.
      */
     fun handle(operation: String, first: String, second: String): String = try {
         when (operation) {
             "init" -> installStandardLibrary(Base64.getDecoder().decode(first))
+            "libraries" -> installLibraries(Base64.getDecoder().decode(first))
             "compile" -> compile(first)
             else -> error("Unknown operation '$operation'")
         }
@@ -70,7 +75,43 @@ class CompilerHost(private val root: Path) {
         return json { field("files", count) }
     }
 
-    private val commonArguments get() = listOf("-kotlin-home", home.toString(), "-libraries", stdlib.toString(), "-ir-output-name", "main")
+    /**
+     * Replaces the libraries the document may use besides the standard library.
+     *
+     * The archive has the format of the standard library's, and every entry name starts with the directory of its
+     * klib: `0-atomicfu-wasm-js/default/manifest`. The klibs come in the order of their dependencies.
+     * An empty archive leaves only the standard library.
+     */
+    fun installLibraries(archive: ByteArray): String {
+        libraryRoot.deleteRecursively()
+        val directories = LinkedHashSet<String>()
+        var count = 0
+        if (archive.isNotEmpty()) {
+            val input = DataInputStream(ByteArrayInputStream(archive))
+            count = input.readInt()
+            repeat(count) {
+                val name = input.readUTF()
+                val segments = name.split('/')
+                require(segments.size > 1 && segments.none { it.isEmpty() || it == "." || it == ".." }) { "Bad entry name in the library archive: $name" }
+                directories += segments.first()
+                val file = libraryRoot.resolve(name)
+                file.parent.createDirectories()
+                file.writeBytes(ByteArray(input.readInt()).also(input::readFully))
+            }
+        }
+        libraries = directories.map(libraryRoot::resolve)
+        return json {
+            field("libraries", libraries.size)
+            field("files", count)
+        }
+    }
+
+    private val commonArguments
+        get() = listOf(
+            "-kotlin-home", home.toString(),
+            "-libraries", (listOf(stdlib) + libraries).joinToString(File.pathSeparator),
+            "-ir-output-name", "main",
+        )
 
     private fun libraryArguments(klib: Path, sourceFile: Path) =
         commonArguments + listOf("-ir-output-dir", klib.toString(), "-nopack", sourceFile.toString())

@@ -84,6 +84,7 @@ private fun App(session: EditorSession) {
                 BasicText("${caretText(session.caret)} | ${text.lines().size} lines, ${text.length} characters | Plugins: ${active.ifEmpty { "none" }}$compiler")
                 session.failures.forEach { BasicText("Plugin loading failed: ${it.module}: ${it.message}") }
             }
+            LibrariesButton(session)
             RunButton(session)
         }
     }
@@ -101,27 +102,48 @@ private fun stateColor(state: RunState): Color = when {
 }
 private val buttonBorder = Color(0xFFC9CCD6)
 
-/** Compiles and runs the document, as Ctrl+Enter does in the editor. */
+/** A button of the status bar; [placed] learns where it is, for the tests that click what is only drawn. */
 @Composable
-private fun RunButton(session: EditorSession) {
+private fun StatusBarButton(placed: (ButtonBounds) -> Unit, onClick: () -> Unit, content: @Composable () -> Unit) {
     val density = LocalDensity.current.density
     Row(
         Modifier
             .padding(start = 12.dp)
             .onGloballyPositioned {
                 val bounds = it.boundsInWindow()
-                session.runButtonBounds = ButtonBounds(bounds.left / density, bounds.top / density, bounds.width / density, bounds.height / density)
+                placed(ButtonBounds(bounds.left / density, bounds.top / density, bounds.width / density, bounds.height / density))
             }
             .clip(RoundedCornerShape(4.dp))
             .border(1.dp, buttonBorder, RoundedCornerShape(4.dp))
             .background(Color.White)
             .pointerHoverIcon(PointerIcon.Hand)
-            .clickable { session.run() }
+            .clickable(onClick = onClick)
             // No higher than a line of text, so that the status bar is as high with the button as without.
             .padding(horizontal = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        content()
+    }
+}
+
+/** Opens the libraries panel, as Ctrl+Alt+Shift+S does; says how many libraries there are, in red when one failed. */
+@Composable
+private fun LibrariesButton(session: EditorSession) {
+    StatusBarButton(placed = { session.librariesButtonBounds = it }, onClick = { session.openLibraries() }) {
+        val libraries = session.libraries
+        val failed = libraries.any { it.state == LibraryState.FAILED }
+        BasicText(
+            if (libraries.isEmpty()) "Libraries" else "Libraries (${libraries.size})",
+            style = TextStyle(color = if (failed) errorRed else Color.Black),
+        )
+    }
+}
+
+/** Compiles and runs the document, as Ctrl+Enter does in the editor. */
+@Composable
+private fun RunButton(session: EditorSession) {
+    StatusBarButton(placed = { session.runButtonBounds = it }, onClick = { session.run() }) {
         // A triangle of its own: the font has no glyph for one.
         Canvas(Modifier.size(9.dp)) {
             val triangle = Path().apply {

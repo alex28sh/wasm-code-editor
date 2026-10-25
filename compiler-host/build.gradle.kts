@@ -2,6 +2,7 @@ import java.io.DataOutputStream
 import java.util.Properties
 import java.util.zip.ZipFile
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 
 // The Kotlin compiler as a WebAssembly module: the published JVM jars are compiled ahead
 // of time by GraalVM Web Image (`native-image --tool:svm-wasm`), which only Oracle GraalVM 25.1+ has.
@@ -26,12 +27,25 @@ val stdlibKlib: Configuration by configurations.creating {
     attributes { attribute(Usage.USAGE_ATTRIBUTE, objects.named("kotlin-runtime")) }
 }
 
+// A library the scenarios compile and analyze programs against, with its dependencies: what the editor sends when a
+// user adds `kotlinx-coroutines-core` in the libraries panel.
+val scenarioLibraries: Configuration by configurations.creating {
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named("kotlin-runtime"))
+        attribute(KotlinPlatformType.attribute, KotlinPlatformType.wasm)
+        attribute(Attribute.of("org.jetbrains.kotlin.wasm.target", String::class.java), "js")
+    }
+    // The hosts have their own standard library, of the compiler's version.
+    exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib")
+}
+
 // The tool that rewrites the jars for Web Image; it needs the class-file API of JDK 24+ and runs on GraalVM's JDK.
 val patcher: SourceSet by sourceSets.creating
 
 dependencies {
     compilerJars("org.jetbrains.kotlin:kotlin-compiler:$kotlinVersion")
     stdlibKlib("org.jetbrains.kotlin:kotlin-stdlib-wasm-js:$kotlinVersion")
+    scenarioLibraries("org.jetbrains.kotlinx:kotlinx-coroutines-core:${libs.versions.kotlinx.coroutines.get()}")
 }
 
 val imageJars: FileCollection = compilerJars
@@ -123,6 +137,45 @@ val stdlibArchive = tasks.register("stdlibArchive") {
     }
 }
 
+// The libraries in the format of the `libraries` request: entries of each klib under a directory of its own,
+// dependencies first. The editor makes the same in the page (kotlin-libraries.mjs) from what the user adds.
+val scenarioLibraryArchive = tasks.register("scenarioLibraryArchive") {
+    description = "Packs the klibs of the scenario library and its dependencies into one archive for the hosts"
+    val libraries = scenarioLibraries
+    val output = layout.buildDirectory.file("scenarioLibraries/libraries.bin")
+    inputs.files(libraries)
+    outputs.file(output)
+    doLast {
+        val files = libraries.incoming.artifacts.artifacts.associate { it.id.componentIdentifier.displayName to it.file }
+        // Depth first, so that every klib comes after the ones it depends on.
+        val ordered = mutableListOf<File>()
+        val visited = mutableSetOf<String>()
+        fun visit(component: org.gradle.api.artifacts.result.ResolvedComponentResult) {
+            val name = component.id.displayName
+            if (!visited.add(name)) return
+            component.dependencies.filterIsInstance<org.gradle.api.artifacts.result.ResolvedDependencyResult>().forEach { visit(it.selected) }
+            files[name]?.let(ordered::add)
+        }
+        libraries.incoming.resolutionResult.root.dependencies.filterIsInstance<org.gradle.api.artifacts.result.ResolvedDependencyResult>().forEach { visit(it.selected) }
+        val entries = ordered.withIndex().flatMap { (index, klib) ->
+            val directory = "$index-${klib.name.removeSuffix(".klib")}"
+            ZipFile(klib).use { zip ->
+                zip.entries().asSequence().filter { !it.isDirectory }.sortedBy { it.name }
+                    .map { "$directory/${it.name}" to zip.getInputStream(it).use { input -> input.readBytes() } }.toList()
+            }
+        }
+        DataOutputStream(output.get().asFile.apply { parentFile.mkdirs() }.outputStream().buffered()).use { out ->
+            out.writeInt(entries.size)
+            for ((name, bytes) in entries) {
+                out.writeUTF(name)
+                out.writeInt(bytes.size)
+                out.write(bytes)
+            }
+        }
+        logger.lifecycle("Scenario libraries: ${ordered.joinToString { it.name }}")
+    }
+}
+
 val hostClasses = sourceSets.main.get().output
 
 // What the image is built from, in the order that lets the rewritten classes shadow the ones in the jars.
@@ -143,7 +196,9 @@ val jvmScenario = tasks.register<JavaExec>("jvmScenario") {
     outputs.dir(agentMetadata)
     val sample = layout.projectDirectory.file("src/scenario/shapes.kt")
     inputs.file(sample)
-    argumentProviders.add { listOf(archive.get().path, sample.asFile.path) }
+    val libraryArchive = scenarioLibraryArchive.map { it.outputs.files.singleFile }
+    inputs.file(libraryArchive)
+    argumentProviders.add { listOf(archive.get().path, sample.asFile.path, libraryArchive.get().path) }
     jvmArgumentProviders.add {
         listOf(
             "-agentlib:native-image-agent=config-output-dir=${agentMetadata.get().asFile}/META-INF/native-image/editor/compiler-host",
@@ -282,7 +337,9 @@ val analysisScenario = tasks.register<JavaExec>("analysisScenario") {
     outputs.dir(analysisAgentMetadata)
     val sample = layout.projectDirectory.file("src/scenario/shapes.kt")
     inputs.file(sample)
-    argumentProviders.add { listOf(archive.get().path, sample.asFile.path) }
+    val libraryArchive = scenarioLibraryArchive.map { it.outputs.files.singleFile }
+    inputs.file(libraryArchive)
+    argumentProviders.add { listOf(archive.get().path, sample.asFile.path, libraryArchive.get().path) }
     jvmArgumentProviders.add {
         listOf(
             "-agentlib:native-image-agent=config-output-dir=${analysisAgentMetadata.get().asFile}/META-INF/native-image/editor/analysis-host",
@@ -356,14 +413,14 @@ tasks.register<Exec>("imageTest") {
     group = "verification"
     enabled = graalvmHome != null
     val dist = compilerDist.map { it.outputs.files.singleFile }
+    val libraries = scenarioLibraryArchive.map { it.outputs.files.singleFile }
     inputs.dir(dist)
+    inputs.file(libraries)
     inputs.dir("src/test/js")
     inputs.dir("src/scenario")
     // No larger stack than the default: a browser gives the images no more.
     doFirst {
-        commandLine(
-            "sh", "-c",
-            "node src/test/js/image-test.cjs '${dist.get().path}' && node src/test/js/analysis-image-test.cjs '${dist.get().path}'",
-        )
+        val arguments = "'${dist.get().path}' '${libraries.get().path}'"
+        commandLine("sh", "-c", "node src/test/js/image-test.cjs $arguments && node src/test/js/analysis-image-test.cjs $arguments")
     }
 }

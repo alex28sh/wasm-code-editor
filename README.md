@@ -14,8 +14,13 @@ This file describes what the application can do. How its parts are built is in:
 ```bash
 ./gradlew devDist                      # the application as unbundled ES modules, in build/devDist
 node e2e/serve.mjs build/devDist 8787  # then open http://localhost:8787
-./gradlew e2eTest                      # the browserl tests (Node.js and Chrome)
+./gradlew e2eTest                      # the browser tests (Node.js and Chrome)
 ```
+
+`serve.mjs` also passes the page's requests under `/maven/` on to Maven Central and Google's repository, which is
+how the [libraries panel](#libraries) downloads libraries. Served by anything else, the editor works without
+libraries. `MAVEN_REPOSITORIES` (a comma-separated list of repository URLs and local directories) changes where
+they come from.
 
 The compiler and the Analysis API are part of the distribution only where Oracle GraalVM is configured
 (`graalvm.home` in `local.properties`). Everything under [Compiling and running](#compiling-and-running) and
@@ -107,11 +112,42 @@ the names declared in the file; it does not know the standard library or types o
   the text.
 - The program runs in a web worker of its own, so it cannot block the editor. It is stopped after 10 seconds.
   When it fails, what it printed before is kept.
-- The document is one file compiled against the Kotlin standard library for Wasm; running it calls its `main` function.
+- A run lasts until `main` has returned and nothing is scheduled any more, so a coroutine waiting in `delay()`,
+  a `suspend fun main` or a timer still prints into the panel.
+- The document is one file compiled against the Kotlin standard library for Wasm and the libraries of the
+  [libraries panel](#libraries); running it calls its `main` function.
 - The compiler is the real Kotlin compiler (K2 with the Wasm back end), itself running as WebAssembly in a worker.
   It is downloaded on the first run and not before: 75 MB for the compiler, 75 MB for the Analysis API and 12 MB for
   the standard library. In the tests the first run of the sample takes about five seconds from a local server, and
   later compilations about a second.
+
+## Libraries
+
+A program may use Kotlin Multiplatform libraries that are built for Kotlin/Wasm in the browser (`wasm-js`), such as
+`kotlinx-coroutines-core`.
+
+- The **Libraries** button in the status bar, or **Ctrl+Alt+Shift+S**, opens the libraries panel. A library is
+  added by its Maven coordinates, `group:artifact:version`, or `group:artifact` for the latest release.
+- The page reads the library's Gradle module metadata, finds its `wasm-js` variant and downloads its klib, with
+  what it depends on. When two libraries need one in different versions, the newer is taken. The standard library
+  is the compiler's own and is never downloaded.
+- Each library shows what it loaded (`Loaded: kotlinx-coroutines-core-wasm-js-1.11.0, atomicfu-wasm-js-0.32.1`) or
+  why it could not: not in the repository, not a Kotlin Multiplatform library, or not built for `wasm-js` (with the
+  platforms it is built for). The button says how many libraries there are, in red when one failed.
+- The compiler and the analysis get the libraries as soon as they are loaded: names from them are no longer marked
+  as unresolved, and completion offers them. A run waits for libraries that are still loading, and stops with
+  `Libraries failed` and the reasons when one could not be loaded.
+- The list is kept in the browser next to the document and loaded again with the page. Nothing is downloaded for
+  libraries until one is listed.
+- Escape, Close or a click beside the panel closes it and gives the keyboard back to the editor.
+
+What does not work:
+- libraries that need a compiler plugin (`kotlinx-serialization`'s `@Serializable`, Compose), because the compiler
+  in the page runs without plugins;
+- libraries that import npm packages or JavaScript files of their own (`@JsModule`), because the program runs from
+  the compiled files alone;
+- repositories other than those of the server, and anything that is not a published release (no local builds, no
+  `.klib` files from disk).
 
 ## Analysis by the compiler
 
@@ -156,21 +192,21 @@ application instead of bundling a copy of the standard library (`kotlin.wasm.com
 
 - The application is served as unbundled ES modules, one `.wasm` per Gradle module, linked in the browser. npm
   packages are resolved by an import map the build generates into `index.html`.
-- Nothing is requested from other origins.
+- Nothing is requested from other origins. Libraries come through the server of the page (`/maven/`).
 - The editor is described to assistive technology by CodeMirror; what Compose draws on the canvas is not.
 
 ## Automation
 
 The application module exports functions the browser tests use to observe and drive what is drawn on the canvas
 (`app/src/wasmJsMain/kotlin/editor/app/Automation.kt`): `automationState()` (text, caret, plugins, failures,
-compiler state, output panel, diagnostics, where the Run button is), `automationSetText`, `automationSelect`, `automationRun` and
-`automationLoadSandboxedPlugin`.
+compiler state, output panel, diagnostics, where the Run and Libraries buttons are, the libraries and what became of
+them), `automationSetText`, `automationSelect`, `automationRun` and `automationLoadSandboxedPlugin`.
 
 ## Modules
 
 | Module | What it is |
 |---|---|
-| `app` | the application: session state, the Compose shell, the plugin loader, the compiler client |
+| `app` | the application: session state, the Compose shell, the plugin loader, the compiler client, the libraries panel and its resolver |
 | `editor-codemirror` | the CodeMirror editor and its Kotlin wrapper |
 | `language-kotlin` | the editor's own analysis of Kotlin text: lexer, symbols, highlighting, completion (multiplatform, with unit tests) |
 | `compiler-host` | builds the Kotlin compiler and the Analysis API into WebAssembly workers (JVM build, needs GraalVM) |
@@ -183,7 +219,8 @@ compiler state, output panel, diagnostics, where the Run button is), `automation
 
 - Files: opening, saving, several documents, projects. A way back to the sample other than clearing the site data.
 - Keeping anything but the text between sessions: the caret, the scroll position, the undo history, the output.
-- Libraries other than the standard library, and input to a running program.
+- Input to a running program.
+- Libraries that need compiler plugins or JavaScript of their own, and libraries from files rather than a repository.
 - Navigation, rename and highlighting by the Analysis API; they use the editor's name-based analysis.
 - Extension functions and keywords in the completion by meaning, and adding imports.
 - Anything a plugin could do with the editor.

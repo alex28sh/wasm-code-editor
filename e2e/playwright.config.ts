@@ -33,6 +33,8 @@ export default defineConfig({
     snapshotPathTemplate: '{testDir}/__screenshots__/{testFileName}/{arg}{ext}',
     webServer: {
         command: `node serve.mjs ../build/e2eDist ${port}`,
+        // Libraries come from a repository the build assembles, not from the network (see e2eMaven).
+        env: { MAVEN_REPOSITORIES: '../build/e2eMaven' },
         url: `http://localhost:${port}/plugins.json`,
         reuseExistingServer: !process.env.CI,
     },

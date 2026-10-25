@@ -71,13 +71,55 @@ export function runKotlinProgram(compiled, onOutput, timeoutMilliseconds) {
             ["'./main.import-object.mjs'", `'${imports}'`],
             ["new URL('./main.wasm',import.meta.url).href", `'${wasm}'`],
         ]);
+        // A program goes on after main returns while something is scheduled: a coroutine waiting in delay(),
+        // a suspend main, a timer. It has finished when no timer is left once main has returned.
         runner = url(
             `for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
                  console[level] = (...values) => postMessage({ output: values.map(String).join(' ') });
              }
+             const pending = new Set();
+             // The browser's timer functions must be called on the global object.
+             const native = {
+                 setTimeout: setTimeout.bind(globalThis),
+                 clearTimeout: clearTimeout.bind(globalThis),
+                 setInterval: setInterval.bind(globalThis),
+                 clearInterval: clearInterval.bind(globalThis),
+             };
+             let returned = false;
+             const settle = () => native.setTimeout(() => {
+                 if (returned && pending.size === 0) postMessage({ done: true, error: '' });
+             }, 0);
+             globalThis.setTimeout = (handler, delay, ...rest) => {
+                 const id = native.setTimeout(() => {
+                     pending.delete(id);
+                     try {
+                         if (typeof handler === 'function') handler(...rest);
+                     } finally {
+                         settle();
+                     }
+                 }, delay);
+                 pending.add(id);
+                 return id;
+             };
+             globalThis.clearTimeout = id => {
+                 pending.delete(id);
+                 native.clearTimeout(id);
+                 settle();
+             };
+             globalThis.setInterval = (handler, delay, ...rest) => {
+                 const id = native.setInterval(handler, delay, ...rest);
+                 pending.add(id);
+                 return id;
+             };
+             globalThis.clearInterval = id => {
+                 pending.delete(id);
+                 native.clearInterval(id);
+                 settle();
+             };
              try {
                  await import(${JSON.stringify(main)});
-                 postMessage({ done: true, error: '' });
+                 returned = true;
+                 settle();
              } catch (error) {
                  postMessage({ done: true, error: String((error && error.stack) || error) });
              }`,
